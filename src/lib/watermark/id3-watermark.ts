@@ -3,73 +3,74 @@ import NodeID3 from "node-id3";
 // Note: this module should only be called from server-side code (Route Handlers, Server Actions).
 // Do not import in Client Components.
 
-/**
- * Metadata watermarking — writes the recipient's email address into the
- * ID3 tags of a WAV/MP3 buffer.
- *
- * Why metadata (not steganography):
- * - Zero CPU overhead vs. audio-spectrum steganography
- * - Fast: ~1ms per file regardless of duration
- * - Sufficient deterrent for the MVP
- * - Tech-savvy users can strip tags, but it handles accidental leaks
- *
- * Fields written:
- *   TXXX (user-defined text) "RecipientEmail" → recipient email
- *   TXXX (user-defined text) "DistributionId" → DB distribution row ID
- *   COMM (comment)           → human-readable notice
- *
- * Note: node-id3 writes ID3v2.3 tags. For WAV files, ID3 tags are embedded
- * in an ID3 chunk at the start — most DAWs read these.
- */
-
 export interface WatermarkOptions {
   recipientEmail: string;
   distributionId: string;
   campaignTitle: string;
   trackTitle: string;
+  artistName?: string;
+  /** Optional cover art buffer to embed as APIC (attached picture) */
+  artworkBuffer?: Buffer;
+  /** MIME type of the artwork (image/jpeg | image/png). Defaults to image/jpeg */
+  artworkMime?: "image/jpeg" | "image/png";
 }
 
 /**
- * Inject watermark metadata into an audio buffer.
- * Returns a new Buffer (never mutates the original).
+ * Inject watermark metadata + optional cover art into an audio buffer.
+ *
+ * Tags written:
+ *   TIT2 (title)             → trackTitle
+ *   TPE1 (artist)            → artistName
+ *   TALB (album)             → campaignTitle
+ *   COMM (comment)           → license notice with recipient email
+ *   TXXX RecipientEmail      → recipient email (machine-readable)
+ *   TXXX DistributionId      → distribution row ID
+ *   APIC (attached picture)  → cover art (if provided)
+ *
+ * Returns a new Buffer — never mutates the original.
  */
 export function injectWatermark(
   audioBuffer: Buffer,
   options: WatermarkOptions,
 ): Buffer {
-  const { recipientEmail, distributionId, campaignTitle, trackTitle } = options;
+  const {
+    recipientEmail,
+    distributionId,
+    campaignTitle,
+    trackTitle,
+    artistName,
+    artworkBuffer,
+    artworkMime = "image/jpeg",
+  } = options;
 
   const tags: NodeID3.Tags = {
-    // Standard comment field — visible in most players
+    title: trackTitle,
+    ...(artistName ? { artist: artistName } : {}),
+    album: campaignTitle,
     comment: {
       language: "eng",
       text: `Licensed to: ${recipientEmail}. Redistribution prohibited. DistributionId: ${distributionId}`,
     },
-    // User-defined text frames for programmatic extraction
     userDefinedText: [
-      {
-        description: "RecipientEmail",
-        value: recipientEmail,
-      },
-      {
-        description: "DistributionId",
-        value: distributionId,
-      },
-      {
-        description: "CampaignTitle",
-        value: campaignTitle,
-      },
-      {
-        description: "TrackTitle",
-        value: trackTitle,
-      },
+      { description: "RecipientEmail", value: recipientEmail },
+      { description: "DistributionId", value: distributionId },
+      { description: "CampaignTitle", value: campaignTitle },
+      { description: "TrackTitle", value: trackTitle },
     ],
   };
 
-  // node-id3 update() preserves existing tags and merges the new ones
+  // Embed cover art if provided
+  if (artworkBuffer && artworkBuffer.length > 0) {
+    tags.image = {
+      mime: artworkMime,
+      type: { id: 3, name: "front cover" }, // APIC type 3 = front cover
+      description: "Cover",
+      imageBuffer: artworkBuffer,
+    };
+  }
+
   const result = NodeID3.update(tags, audioBuffer);
 
-  // update() returns false on failure or the modified Buffer on success
   if (!result) {
     console.warn("[watermark] Failed to inject metadata — returning original buffer");
     return audioBuffer;
@@ -80,7 +81,6 @@ export function injectWatermark(
 
 /**
  * Read the watermark from a buffer (for verification/forensics).
- * Returns null if no watermark is present.
  */
 export function readWatermark(
   audioBuffer: Buffer,

@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { randomUUID } from "crypto";
@@ -60,12 +61,13 @@ export async function signUpAction(
     access_token: hashedPassword,
   });
 
-  // Create default profile (label workspace by default)
+  // Create default profile (label workspace by default, free plan)
   await db.insert(profiles).values({
     id: randomUUID(),
     userId,
     activeWorkspace: "label",
-    storageQuotaBytes: "5368709120", // 5 GB
+    planTier: "free",
+    storageQuotaBytes: String(2 * 1024 ** 3), // 2 GB
     storageUsedBytes: "0",
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -110,5 +112,7 @@ export async function logoutAction(): Promise<void> {
 export async function switchWorkspaceAction(workspace: "label" | "dj"): Promise<void> {
   const { switchWorkspace } = await import("@/lib/dal");
   await switchWorkspace(workspace);
+  // Revalidate all dashboard routes so the layout re-fetches the profile
+  revalidatePath("/dashboard", "layout");
   redirect("/dashboard");
 }

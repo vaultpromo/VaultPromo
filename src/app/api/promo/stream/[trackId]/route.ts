@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { tracks, campaignDistributions, campaigns } from "@/db/schema";
 import { storage } from "@/lib/storage";
 import { getPromoSession } from "@/lib/promo/session";
+import { promoStreamLimiter } from "@/lib/rate-limiter";
 
 /**
  * GET /api/promo/stream/[trackId]?campaignId=<id>
@@ -29,6 +30,12 @@ export async function GET(
 
   if (!campaignId) {
     return Response.json({ error: "campaignId is required" }, { status: 400 });
+  }
+
+  // Rate limit by IP
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  if (!promoStreamLimiter.check(ip)) {
+    return Response.json({ error: "Too many requests" }, { status: 429 });
   }
 
   // Verify promo session

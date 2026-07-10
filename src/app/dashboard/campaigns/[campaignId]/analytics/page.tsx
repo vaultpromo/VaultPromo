@@ -97,6 +97,12 @@ export default async function CampaignAnalyticsPage(
         </Link>
         <h1 className="mt-2 text-2xl font-bold text-white">{campaign.title} — Analytics</h1>
         <p className="mt-1 text-sm text-zinc-400">{campaign.artistName}</p>
+        <p className="mt-2 text-xs text-white/30">
+          Share with artist:{" "}
+          <span className="font-mono text-white/50">
+            {process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/feedback/{campaignId}
+          </span>
+        </p>
       </div>
 
       {/* Funnel metrics */}

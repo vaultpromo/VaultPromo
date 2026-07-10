@@ -71,6 +71,30 @@ export class RateLimiter {
 
 /** Singleton limiter for the promo token access endpoint */
 export const promoTokenLimiter = new RateLimiter({
-  windowMs: 60 * 1000, // 1 minute
-  maxRequests: 20,      // 20 attempts per IP per minute
+  windowMs: 60 * 1000,
+  maxRequests: 20,
+});
+
+/** Limiter for stream (audio player) — generous but prevents scraping */
+export const promoStreamLimiter = new RateLimiter({
+  windowMs: 60 * 1000,
+  maxRequests: 60, // 60 stream requests/min — enough for normal playback
+});
+
+/** Limiter for download — strict: feedback required anyway, but cap abuse */
+export const promoDownloadLimiter = new RateLimiter({
+  windowMs: 60 * 1000,
+  maxRequests: 20,
+});
+
+/** Limiter for feedback submission */
+export const promoFeedbackLimiter = new RateLimiter({
+  windowMs: 60 * 1000,
+  maxRequests: 10,
+});
+
+/** Limiter for storage upload-url — one presigned URL per track upload */
+export const storageUploadLimiter = new RateLimiter({
+  windowMs: 60 * 1000,
+  maxRequests: 30,
 });

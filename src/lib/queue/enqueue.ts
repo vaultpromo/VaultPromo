@@ -18,6 +18,10 @@ export async function enqueueTranscode(params: {
 }): Promise<string | null> {
   const boss = await getQueue();
 
+  // pg-boss 12 requires the queue to exist before send().
+  // createQueue() is idempotent — safe to call every time.
+  await boss.createQueue(QUEUES.AUDIO_TRANSCODE);
+
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const callbackUrl = `${appUrl}/api/pipeline/transcode-complete`;
 
@@ -36,8 +40,8 @@ export async function enqueueTranscode(params: {
     retryLimit: 3,
     retryDelay: 30,
     retryBackoff: true,
-    // Expire unprocessed jobs after 24 hours
-    expireInSeconds: 86400,
+    // Expire unprocessed jobs after 12 hours (pg-boss 12 limit is <86400)
+    expireInSeconds: 43200,
     // Deduplicate: only one active transcode per track
     singletonKey: params.trackId,
   });

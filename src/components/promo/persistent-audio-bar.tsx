@@ -55,6 +55,20 @@ export function PersistentAudioBar() {
       </div>
 
       <div className="flex items-center gap-4">
+        {/* Cover art thumbnail */}
+        {currentTrack.artworkUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={currentTrack.artworkUrl}
+            alt="Cover"
+            className="h-9 w-9 shrink-0 rounded object-cover"
+          />
+        ) : (
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-white/[0.06] text-sm text-white/20">
+            ♪
+          </div>
+        )}
+
         {/* Play/Pause */}
         <button
           onClick={togglePlay}

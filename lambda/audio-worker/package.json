@@ -1,13 +1,12 @@
 {
   "name": "fatdrop-audio-worker",
   "version": "1.0.0",
-  "description": "Lambda container worker: fetches WAV from R2, transcodes to 128kbps MP3 with FFmpeg, uploads preview to R2, calls webhook.",
+  "description": "Lambda worker: fetches WAV from R2, transcodes to 128kbps MP3 with FFmpeg, uploads preview to R2, calls webhook.",
   "private": true,
-  "type": "commonjs",
+  "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
-    "dev": "ts-node src/index.ts"
+    "build": "tsc"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1084.0",

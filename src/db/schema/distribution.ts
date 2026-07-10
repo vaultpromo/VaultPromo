@@ -69,6 +69,8 @@ export const feedback = pgTable(
       .references(() => contacts.id, { onDelete: "cascade" }),
     // Quantitative: 1–5 stars
     rating: text("rating", { enum: ["1", "2", "3", "4", "5"] }).notNull(),
+    // Reviewer name/alias (optional but shown in analytics)
+    reviewerName: text("reviewer_name"),
     // Qualitative: free-text comment (min length enforced in app)
     comment: text("comment").notNull(),
     // Which track was the favourite of the release

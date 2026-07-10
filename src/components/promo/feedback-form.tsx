@@ -18,34 +18,18 @@ interface FeedbackFormProps {
   onSubmitted: () => void;
 }
 
-export interface FeedbackData {
-  rating: 1 | 2 | 3 | 4 | 5;
-  comment: string;
-  favoriteTrackId: string;
-}
-
-/**
- * The Feedback Gate form.
- *
- * Validation rules (all enforced on the client; re-enforced server-side in Task 11):
- * 1. Star rating: 1–5 (required)
- * 2. Favorite track: must select one from the list (required)
- * 3. Comment: min MIN_COMMENT_LENGTH characters (prevents "ok", ".", etc.)
- *
- * The submit button stays disabled until all three conditions are met.
- * On submit, calls POST /api/promo/feedback (Task 11).
- */
 export function FeedbackForm({ campaignId, distributionId, tracks, onSubmitted }: FeedbackFormProps) {
   const [rating, setRating] = useState<number>(0);
   const [hoverRating, setHoverRating] = useState<number>(0);
   const [favoriteTrackId, setFavoriteTrackId] = useState<string>("");
   const [comment, setComment] = useState<string>("");
+  const [reviewerName, setReviewerName] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>("");
 
-  // Form is valid when all three fields are filled
   const commentValid = comment.trim().length >= MIN_COMMENT_LENGTH;
-  const formValid = rating > 0 && favoriteTrackId !== "" && commentValid;
+  const nameValid = reviewerName.trim().length >= 2;
+  const formValid = rating > 0 && favoriteTrackId !== "" && commentValid && nameValid;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -64,6 +48,7 @@ export function FeedbackForm({ campaignId, distributionId, tracks, onSubmitted }
           rating,
           favoriteTrackId,
           comment: comment.trim(),
+          reviewerName: reviewerName.trim(),
         }),
       });
 
@@ -81,15 +66,36 @@ export function FeedbackForm({ campaignId, distributionId, tracks, onSubmitted }
     }
   }
 
+  const RATING_LABELS = ["", "Not for me", "Below average", "Good", "Really good", "Outstanding"];
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+
+      {/* Name */}
+      <div className="space-y-1.5">
+        <label htmlFor="reviewer-name" className="block text-sm font-semibold text-white/80">
+          Your name or alias <span className="text-red-400">*</span>
+        </label>
+        <input
+          id="reviewer-name"
+          type="text"
+          value={reviewerName}
+          onChange={(e) => setReviewerName(e.target.value)}
+          placeholder="DJ Alias / Full Name"
+          className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-sm text-white placeholder-white/20 focus:border-white/20 focus:outline-none"
+        />
+        {reviewerName.length > 0 && !nameValid && (
+          <p className="text-xs text-red-400">At least 2 characters required</p>
+        )}
+      </div>
+
       {/* Star rating */}
       <div className="space-y-2">
-        <label className="block text-sm font-semibold text-zinc-200">
+        <label className="block text-sm font-semibold text-white/80">
           Overall rating <span className="text-red-400">*</span>
         </label>
         <div
-          className="flex gap-1"
+          className="flex gap-1.5"
           role="radiogroup"
           aria-label="Rating"
           onMouseLeave={() => setHoverRating(0)}
@@ -103,7 +109,7 @@ export function FeedbackForm({ campaignId, distributionId, tracks, onSubmitted }
               aria-label={`${star} star${star !== 1 ? "s" : ""}`}
               aria-pressed={rating === star}
               className={`text-2xl transition-transform hover:scale-110 focus:outline-none ${
-                (hoverRating || rating) >= star ? "text-amber-400" : "text-zinc-700"
+                (hoverRating || rating) >= star ? "text-amber-400" : "text-white/10"
               }`}
             >
               ★
@@ -111,26 +117,24 @@ export function FeedbackForm({ campaignId, distributionId, tracks, onSubmitted }
           ))}
         </div>
         {rating > 0 && (
-          <p className="text-xs text-zinc-500">
-            {["", "Not for me", "Below average", "Good", "Really good", "Outstanding"][rating]}
-          </p>
+          <p className="text-xs text-white/30">{RATING_LABELS[rating]}</p>
         )}
       </div>
 
       {/* Favorite track */}
       <div className="space-y-2">
         <fieldset>
-          <legend className="mb-2 block text-sm font-semibold text-zinc-200">
+          <legend className="mb-2 block text-sm font-semibold text-white/80">
             Favorite track <span className="text-red-400">*</span>
           </legend>
           <div className="space-y-1.5">
             {tracks.map((track) => (
               <label
                 key={track.id}
-                className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 transition ${
+                className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 transition ${
                   favoriteTrackId === track.id
-                    ? "border-violet-500 bg-violet-900/20"
-                    : "border-zinc-700 bg-zinc-900 hover:border-zinc-600"
+                    ? "border-white/20 bg-white/[0.06]"
+                    : "border-white/[0.06] bg-white/[0.02] hover:border-white/[0.1]"
                 }`}
               >
                 <input
@@ -139,12 +143,12 @@ export function FeedbackForm({ campaignId, distributionId, tracks, onSubmitted }
                   value={track.id}
                   checked={favoriteTrackId === track.id}
                   onChange={() => setFavoriteTrackId(track.id)}
-                  className="accent-violet-500"
+                  className="accent-white"
                 />
-                <span className="text-sm text-zinc-200">
+                <span className="text-sm text-white/80">
                   {track.title}
                   {track.mixVersion && (
-                    <span className="ml-1.5 text-xs text-zinc-400">{track.mixVersion}</span>
+                    <span className="ml-1.5 text-xs text-white/30">{track.mixVersion}</span>
                   )}
                 </span>
               </label>
@@ -155,10 +159,10 @@ export function FeedbackForm({ campaignId, distributionId, tracks, onSubmitted }
 
       {/* Comment */}
       <div className="space-y-1.5">
-        <label htmlFor="feedback-comment" className="block text-sm font-semibold text-zinc-200">
+        <label htmlFor="feedback-comment" className="block text-sm font-semibold text-white/80">
           Your thoughts <span className="text-red-400">*</span>
-          <span className="ml-2 text-xs font-normal text-zinc-500">
-            (min {MIN_COMMENT_LENGTH} characters)
+          <span className="ml-2 text-xs font-normal text-white/25">
+            min {MIN_COMMENT_LENGTH} characters
           </span>
         </label>
         <textarea
@@ -166,36 +170,32 @@ export function FeedbackForm({ campaignId, distributionId, tracks, onSubmitted }
           rows={4}
           value={comment}
           onChange={(e) => setComment(e.target.value)}
-          placeholder="Tell the label what you think. How does it fit your sets? What mood does it create?"
-          className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+          placeholder="How does it fit your sets? What's the energy? Where would you play it?"
+          className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-sm text-white/90 placeholder-white/15 focus:border-white/20 focus:outline-none"
         />
-        <div className="flex items-center justify-between">
-          <p className={`text-xs ${commentValid ? "text-green-400" : "text-zinc-500"}`}>
-            {comment.trim().length}/{MIN_COMMENT_LENGTH} minimum characters
-            {commentValid && " ✓"}
-          </p>
-        </div>
+        <p className={`text-xs ${commentValid ? "text-emerald-400" : "text-white/20"}`}>
+          {comment.trim().length}/{MIN_COMMENT_LENGTH}
+          {commentValid && " ✓"}
+        </p>
       </div>
 
       {error && (
-        <p role="alert" className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">
+        <p role="alert" className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-sm text-red-400">
           {error}
         </p>
       )}
 
-      {/* Submit — disabled until form is valid */}
       <button
         type="submit"
         disabled={!formValid || submitting}
-        aria-disabled={!formValid || submitting}
-        className="w-full rounded-lg bg-violet-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-40"
+        className="w-full rounded-lg bg-white px-4 py-3 text-sm font-semibold text-black transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-30"
       >
-        {submitting ? "Submitting…" : "Submit feedback & unlock downloads"}
+        {submitting ? "Submitting…" : "Submit & unlock downloads"}
       </button>
 
       {!formValid && (
-        <p className="text-center text-xs text-zinc-600">
-          Complete all fields above to unlock the download button
+        <p className="text-center text-xs text-white/15">
+          Fill in all fields above to unlock downloads
         </p>
       )}
     </form>

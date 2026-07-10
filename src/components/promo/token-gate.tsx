@@ -22,6 +22,7 @@ interface TokenGateProps {
   tracks: PromoTrack[];
   initialFeedbackSubmitted: boolean;
   initialHasDownloaded: boolean;
+  artworkUrl?: string | null;
 }
 
 /**
@@ -38,6 +39,7 @@ export function TokenGate({
   distributionId,
   tracks,
   initialFeedbackSubmitted,
+  artworkUrl,
 }: TokenGateProps) {
   const { state: playerState, playTrack } = useAudioPlayer();
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(initialFeedbackSubmitted);
@@ -52,6 +54,7 @@ export function TokenGate({
       mixVersion: track.mixVersion,
       campaignId,
       streamUrl: null,
+      artworkUrl: artworkUrl ?? null,
     };
     playTrack(playerTrack);
   }
@@ -178,14 +181,58 @@ function DownloadSection({
   campaignId: string;
 }) {
   return (
-    <div className="mt-4 space-y-2">
-      <p className="text-xs font-semibold tracking-widest text-zinc-500 uppercase">
-        Download high-quality files
-      </p>
-      {tracks.map((track) => (
-        <DownloadButton key={track.id} track={track} campaignId={campaignId} />
-      ))}
+    <div className="mt-5 space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase tracking-widest text-white/30">
+          High-quality files
+        </p>
+        {tracks.length > 1 && (
+          <DownloadAllButton tracks={tracks} campaignId={campaignId} />
+        )}
+      </div>
+      <div className="space-y-1.5">
+        {tracks.map((track) => (
+          <DownloadButton key={track.id} track={track} campaignId={campaignId} />
+        ))}
+      </div>
     </div>
+  );
+}
+
+function DownloadAllButton({
+  tracks,
+  campaignId,
+}: {
+  tracks: PromoTrack[];
+  campaignId: string;
+}) {
+  const [downloading, setDownloading] = useState(false);
+
+  async function handleDownloadAll() {
+    setDownloading(true);
+    // Stagger downloads so the browser doesn't block them
+    for (const track of tracks) {
+      const url = `/api/promo/download/${track.id}?campaignId=${campaignId}`;
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      // Small delay between triggers
+      await new Promise((r) => setTimeout(r, 600));
+    }
+    setDownloading(false);
+  }
+
+  return (
+    <button
+      onClick={handleDownloadAll}
+      disabled={downloading}
+      className="text-xs text-white/40 underline-offset-2 transition hover:text-white/70 hover:underline disabled:opacity-40"
+    >
+      {downloading ? "Downloading…" : "Download all"}
+    </button>
   );
 }
 
@@ -198,50 +245,35 @@ function DownloadButton({
 }) {
   const [state, setState] = useState<"idle" | "loading" | "error">("idle");
 
-  async function handleDownload() {
+  function handleDownload() {
     setState("loading");
-    try {
-      const res = await fetch(
-        `/api/promo/download/${track.id}?campaignId=${campaignId}`,
-      );
-      if (!res.ok) throw new Error("Download failed");
-      const { url, filename } = (await res.json()) as {
-        url: string;
-        filename: string;
-      };
-
-      // Trigger browser download
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename ?? `${track.title}.wav`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setState("idle");
-    } catch {
-      setState("error");
-      setTimeout(() => setState("idle"), 3000);
-    }
+    // Direct link to the streaming endpoint — browser downloads without navigating
+    const url = `/api/promo/download/${track.id}?campaignId=${campaignId}`;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = ""; // filename comes from Content-Disposition header
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    // Reset after a moment (can't truly detect completion from the client)
+    setTimeout(() => setState("idle"), 3000);
   }
 
   return (
     <button
       onClick={handleDownload}
       disabled={state === "loading"}
-      className="flex w-full items-center justify-between rounded-lg border border-green-700/40 bg-zinc-900 px-4 py-2.5 text-sm transition hover:border-green-600/60 hover:bg-zinc-800 disabled:opacity-60"
+      className="flex w-full items-center justify-between rounded-lg border border-white/[0.06] bg-white/[0.02] px-4 py-2.5 text-sm transition hover:border-white/[0.12] hover:bg-white/[0.04] disabled:opacity-50"
     >
-      <span className="truncate font-medium text-zinc-200">
+      <span className="truncate text-left text-white/80">
         {track.title}
         {track.mixVersion && (
-          <span className="ml-2 text-xs text-zinc-500">{track.mixVersion}</span>
+          <span className="ml-2 text-xs text-white/30">{track.mixVersion}</span>
         )}
+        <span className="ml-2 text-xs text-white/20">{track.artistName}</span>
       </span>
-      <span className="ml-3 shrink-0 text-xs text-green-400">
-        {state === "loading"
-          ? "Preparing…"
-          : state === "error"
-            ? "Error — retry"
-            : "↓ WAV"}
+      <span className="ml-3 shrink-0 text-xs text-emerald-400/80">
+        {state === "loading" ? "Starting…" : "↓ WAV"}
       </span>
     </button>
   );

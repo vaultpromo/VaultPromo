@@ -85,6 +85,19 @@ export async function importContactsAction(
     };
   }
 
+  // ── Plan check: contact limit ─────────────────────────────────────────
+  const { canAddContacts } = await import("@/lib/plans");
+  const planCheck = await canAddContacts(userId, parseResult.valid.length);
+  if (!planCheck.allowed) {
+    return {
+      imported: 0,
+      skipped: 0,
+      errors: 0,
+      duplicatesInFile: 0,
+      message: planCheck.reason,
+    };
+  }
+
   // Verify list ownership if provided
   if (listId) {
     const list = await db.query.mailingLists.findFirst({

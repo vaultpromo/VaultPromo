@@ -1,41 +1,67 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { timingSafeEqual } from "crypto";
 import { db } from "@/db";
 import { tracks } from "@/db/schema";
 
 /**
  * POST /api/pipeline/transcode-complete
  *
- * Called by the Lambda audio worker when transcoding finishes (success or failure).
- * Secured by a shared secret in the Authorization header (Bearer token).
+ * Machine-to-machine webhook called by Lambda when transcoding finishes.
  *
- * This route is intentionally NOT behind verifySession() — it is machine-to-machine.
- * Instead it validates a PIPELINE_WEBHOOK_SECRET from env vars.
+ * Security:
+ * - Uses timingSafeEqual to prevent timing attacks on the secret comparison
+ * - Verifies campaignId matches the track's actual campaignId before updating
+ *   (prevents a valid secret holder from setting previewKey on arbitrary tracks)
+ * - previewKey is sanitized to only allow expected path patterns
  */
 
 const bodySchema = z.object({
-  trackId: z.string().min(1),
-  campaignId: z.string().min(1),
+  trackId: z.string().uuid(),
+  campaignId: z.string().uuid(),
   success: z.boolean(),
-  previewKey: z.string().optional(),
-  durationSeconds: z.number().optional(),
-  error: z.string().optional(),
+  // previewKey must match the expected pattern: campaigns/<uuid>/tracks/<uuid>/preview.mp3
+  previewKey: z
+    .string()
+    .regex(
+      /^campaigns\/[0-9a-f-]{36}\/tracks\/[0-9a-f-]{36}\/preview\.mp3$/,
+      "Invalid previewKey format",
+    )
+    .optional(),
+  durationSeconds: z.number().nonnegative().optional(),
+  error: z.string().max(500).optional(),
 });
 
+function timingSafeStringEqual(a: string, b: string): boolean {
+  try {
+    const bufA = Buffer.from(a, "utf8");
+    const bufB = Buffer.from(b, "utf8");
+    if (bufA.length !== bufB.length) {
+      // Still do a comparison to avoid length-based timing leak
+      timingSafeEqual(bufA, bufA);
+      return false;
+    }
+    return timingSafeEqual(bufA, bufB);
+  } catch {
+    return false;
+  }
+}
+
 export async function POST(request: NextRequest) {
-  // ── Auth: shared webhook secret ─────────────────────────────────────────
+  // ── Auth: timing-safe secret comparison ─────────────────────────────────
   const secret = process.env.PIPELINE_WEBHOOK_SECRET;
   if (!secret) {
-    return Response.json({ error: "Webhook secret not configured" }, { status: 500 });
+    return Response.json({ error: "Webhook not configured" }, { status: 500 });
   }
 
-  const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${secret}`) {
+  const authHeader = request.headers.get("authorization") ?? "";
+  const providedSecret = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+
+  if (!timingSafeStringEqual(providedSecret, secret)) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // ── Parse body ──────────────────────────────────────────────────────────
   let body: unknown;
   try {
     body = await request.json();
@@ -45,12 +71,24 @@ export async function POST(request: NextRequest) {
 
   const parsed = bodySchema.safeParse(body);
   if (!parsed.success) {
-    return Response.json({ error: "Invalid payload", details: parsed.error.flatten() }, { status: 400 });
+    return Response.json({ error: "Invalid payload" }, { status: 400 });
   }
 
-  const { trackId, success, previewKey, durationSeconds, error } = parsed.data;
+  const { trackId, campaignId, success, previewKey, error } = parsed.data;
 
-  // ── Update track status ─────────────────────────────────────────────────
+  // ── Ownership verification ───────────────────────────────────────────────
+  // Verify the track actually belongs to the claimed campaign.
+  // Prevents a valid-secret caller from updating tracks across campaigns.
+  const track = await db.query.tracks.findFirst({
+    where: and(eq(tracks.id, trackId), eq(tracks.campaignId, campaignId)),
+    columns: { id: true },
+  });
+
+  if (!track) {
+    // Return 200 to avoid information leakage about track existence
+    return Response.json({ ok: true });
+  }
+
   if (success && previewKey) {
     await db
       .update(tracks)

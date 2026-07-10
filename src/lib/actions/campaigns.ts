@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { verifySession } from "@/lib/dal";
 import { db } from "@/db";
 import { campaigns, tracks } from "@/db/schema";
+import { canCreateCampaign, canUploadStorage, incrementStorageUsed } from "@/lib/plans";
 import {
   campaignSchema,
   trackSchema,
@@ -17,15 +18,17 @@ import {
 
 // ── Campaign Actions ────────────────────────────────────────────────────────
 
-/**
- * Create a new campaign (draft status).
- * On success, redirects to the campaign detail page.
- */
 export async function createCampaignAction(
   _prevState: CampaignFormState,
   formData: FormData,
 ): Promise<CampaignFormState> {
   const { userId } = await verifySession();
+
+  // ── Plan check: active campaign limit ───────────────────────────────────
+  const planCheck = await canCreateCampaign(userId);
+  if (!planCheck.allowed) {
+    return { message: planCheck.reason };
+  }
 
   const parsed = campaignSchema.safeParse({
     title: formData.get("title"),
@@ -59,6 +62,36 @@ export async function createCampaignAction(
   });
 
   redirect(`/dashboard/campaigns/${campaignId}`);
+}
+
+/**
+ * Save the R2 artwork key for a campaign after a browser upload.
+ * Called from ArtworkSection after the file finishes uploading to R2.
+ */
+export async function saveArtworkKeyAction(
+  campaignId: string,
+  artworkKey: string,
+): Promise<void> {
+  const { userId } = await verifySession();
+
+  // Validate key format — must be campaigns/<uuid>/artwork.<ext>
+  if (!/^campaigns\/[0-9a-f-]{36}\/artwork\.(jpg|png|webp)$/.test(artworkKey)) {
+    return;
+  }
+
+  const campaign = await db.query.campaigns.findFirst({
+    where: and(eq(campaigns.id, campaignId), eq(campaigns.userId, userId)),
+    columns: { id: true },
+  });
+
+  if (!campaign) return;
+
+  await db
+    .update(campaigns)
+    .set({ artworkUrl: artworkKey, updatedAt: new Date() })
+    .where(eq(campaigns.id, campaignId));
+
+  revalidatePath(`/dashboard/campaigns/${campaignId}`);
 }
 
 /**
@@ -271,6 +304,15 @@ export async function confirmTrackUploadAction(data: {
     return { success: false, error: "Access denied." };
   }
 
+  // ── Plan check: storage quota ─────────────────────────────────────────
+  const fileSizeNum = data.fileSizeBytes ? Number(data.fileSizeBytes) : 0;
+  if (fileSizeNum > 0) {
+    const storageCheck = await canUploadStorage(userId, fileSizeNum);
+    if (!storageCheck.allowed) {
+      return { success: false, error: storageCheck.reason };
+    }
+  }
+
   await db
     .update(tracks)
     .set({
@@ -281,6 +323,11 @@ export async function confirmTrackUploadAction(data: {
     })
     .where(and(eq(tracks.id, parsed.data.trackId), eq(tracks.campaignId, data.campaignId)));
 
+  // Track storage usage
+  if (fileSizeNum > 0) {
+    await incrementStorageUsed(userId, fileSizeNum);
+  }
+
   // Enqueue the Lambda transcoding job
   const { enqueueTranscode } = await import("@/lib/queue/enqueue");
   await enqueueTranscode({
@@ -288,6 +335,11 @@ export async function confirmTrackUploadAction(data: {
     campaignId: data.campaignId,
     originalKey: parsed.data.originalKey,
   });
+
+  // Invoke Lambda immediately so the job is processed without manual intervention.
+  // Fire-and-forget — if Lambda isn't reachable the job stays in pg-boss queue.
+  const { invokeLambdaWorker } = await import("@/lib/lambda/invoke");
+  await invokeLambdaWorker();
 
   revalidatePath(`/dashboard/campaigns/${data.campaignId}`);
   return { success: true };
@@ -308,4 +360,56 @@ export async function deleteTrackAction(trackId: string, campaignId: string): Pr
   await db.delete(tracks).where(and(eq(tracks.id, trackId), eq(tracks.campaignId, campaignId)));
 
   revalidatePath(`/dashboard/campaigns/${campaignId}`);
+}
+
+/**
+ * Re-enqueue all tracks in a campaign that are stuck in "processing" or "failed"
+ * and invoke Lambda to process them immediately.
+ * Used by the "Transcode all" button.
+ */
+export async function transcodeAllAction(
+  campaignId: string,
+): Promise<{ queued: number; error?: string }> {
+  const { userId } = await verifySession();
+
+  const campaign = await db.query.campaigns.findFirst({
+    where: and(eq(campaigns.id, campaignId), eq(campaigns.userId, userId)),
+  });
+
+  if (!campaign) return { queued: 0, error: "Campaign not found." };
+
+  // Find tracks that have an originalKey but aren't ready yet
+  const pendingTracks = await db.query.tracks.findMany({
+    where: and(
+      eq(tracks.campaignId, campaignId),
+    ),
+    columns: { id: true, originalKey: true, processingStatus: true },
+  });
+
+  const toProcess = pendingTracks.filter(
+    (t) => t.originalKey && (t.processingStatus === "processing" || t.processingStatus === "failed" || t.processingStatus === "pending"),
+  );
+
+  if (toProcess.length === 0) return { queued: 0 };
+
+  const { enqueueTranscode } = await import("@/lib/queue/enqueue");
+
+  for (const track of toProcess) {
+    try {
+      await enqueueTranscode({
+        trackId: track.id,
+        campaignId,
+        originalKey: track.originalKey!,
+      });
+    } catch {
+      // singletonKey prevents duplicates — ignore if already queued
+    }
+  }
+
+  // Invoke Lambda once to process the whole batch
+  const { invokeLambdaWorker } = await import("@/lib/lambda/invoke");
+  await invokeLambdaWorker();
+
+  revalidatePath(`/dashboard/campaigns/${campaignId}`);
+  return { queued: toProcess.length };
 }

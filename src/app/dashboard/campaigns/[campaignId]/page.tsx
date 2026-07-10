@@ -4,9 +4,12 @@ import Link from "next/link";
 import { verifySession } from "@/lib/dal";
 import { db } from "@/db";
 import { campaigns, tracks, mailingLists } from "@/db/schema";
+import { storage } from "@/lib/storage";
 import { TrackList } from "@/components/campaigns/track-list";
 import { AddTrackForm } from "@/components/campaigns/add-track-form";
 import { DistributeForm } from "@/components/distribution/distribute-form";
+import { TranscodeAllButton } from "@/components/campaigns/transcode-all-button";
+import { ArtworkSection } from "@/components/campaigns/artwork-section";
 import { deleteCampaignAction } from "@/lib/actions/campaigns";
 
 export default async function CampaignDetailPage(props: PageProps<"/dashboard/campaigns/[campaignId]">) {
@@ -28,6 +31,20 @@ export default async function CampaignDetailPage(props: PageProps<"/dashboard/ca
   ]);
 
   if (!campaign) notFound();
+
+  // Generate presigned URL for artwork preview if artwork exists
+  let artworkPresignedUrl: string | null = null;
+  if (campaign.artworkUrl) {
+    try {
+      artworkPresignedUrl = await storage.getPresignedUrl({
+        bucket: "originals",
+        key: campaign.artworkUrl,
+        expiresInSeconds: 3600,
+      });
+    } catch {
+      // Non-fatal — artwork preview just won't show
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -56,6 +73,13 @@ export default async function CampaignDetailPage(props: PageProps<"/dashboard/ca
           >
             Analytics
           </Link>
+          <Link
+            href={`/feedback/${campaignId}`}
+            target="_blank"
+            className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-400 transition hover:border-zinc-500 hover:text-white"
+          >
+            Artist view ↗
+          </Link>
           <form
             action={async () => {
               "use server";
@@ -72,24 +96,40 @@ export default async function CampaignDetailPage(props: PageProps<"/dashboard/ca
         </div>
       </div>
 
-      {/* Campaign metadata */}
-      {campaign.description && (
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-5 py-4">
-          <h2 className="mb-1 text-xs font-semibold tracking-widest text-zinc-500 uppercase">
-            Press Release
-          </h2>
-          <p className="whitespace-pre-wrap text-sm text-zinc-300">{campaign.description}</p>
-        </div>
-      )}
+      {/* Artwork + Press Release */}
+      <div className="grid gap-5 lg:grid-cols-[auto_1fr]">
+        <ArtworkSection
+          campaignId={campaignId}
+          artworkKey={campaign.artworkUrl ?? null}
+          artworkPresignedUrl={artworkPresignedUrl}
+        />
+
+        {campaign.description && (
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-5 py-4">
+            <h2 className="mb-1 text-xs font-semibold tracking-widest text-zinc-500 uppercase">
+              Press Release
+            </h2>
+            <p className="whitespace-pre-wrap text-sm text-zinc-300">{campaign.description}</p>
+          </div>
+        )}
+      </div>
 
       {/* Tracks section */}
       <div className="space-y-4">
-        <h2 className="text-lg font-semibold text-white">
-          Tracks
-          <span className="ml-2 rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">
-            {campaignTracks.length}
-          </span>
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-white">
+            Tracks
+            <span className="ml-2 rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">
+              {campaignTracks.length}
+            </span>
+          </h2>
+          <TranscodeAllButton
+            campaignId={campaignId}
+            pendingCount={campaignTracks.filter(
+              (t) => t.originalKey && (t.processingStatus === "processing" || t.processingStatus === "failed" || t.processingStatus === "pending"),
+            ).length}
+          />
+        </div>
 
         <TrackList tracks={campaignTracks} campaignId={campaignId} />
 

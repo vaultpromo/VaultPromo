@@ -2,26 +2,35 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 
 /**
- * Next.js 16 uses proxy.ts instead of middleware.ts.
- *
- * Optimistic auth checks only (reads cookie, no DB call).
- * Heavy authorization happens in the DAL close to data.
+ * Next.js 16 proxy (middleware).
+ * Optimistic auth checks only — heavy authorization happens in the DAL.
  */
 
-const PUBLIC_ROUTES = ["/", "/login", "/signup"];
-const AUTH_ROUTES = ["/login", "/signup"];
-const PROMO_ROUTE_PREFIX = "/promo"; // token-based, no session required
-const API_PROMO_PREFIX = "/api/promo"; // public token-access API
+const PUBLIC_ROUTES = new Set(["/", "/login", "/signup", "/pricing"]);
+const AUTH_ROUTES = new Set(["/login", "/signup"]);
+const PROMO_ROUTE_PREFIX = "/promo";
+const API_PROMO_PREFIX = "/api/promo";
+const FEEDBACK_PREFIX = "/feedback";
+
+/** Only allow redirects to internal paths — prevents open redirect */
+function isSafeCallbackUrl(url: string): boolean {
+  // Must be a relative path starting with / and not //
+  return url.startsWith("/") && !url.startsWith("//") && !url.includes("://");
+}
 
 export default async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Promo routes are publicly accessible via delivery token — skip auth
-  if (pathname.startsWith(PROMO_ROUTE_PREFIX) || pathname.startsWith(API_PROMO_PREFIX)) {
+  // Promo and feedback routes are publicly accessible
+  if (
+    pathname.startsWith(PROMO_ROUTE_PREFIX) ||
+    pathname.startsWith(API_PROMO_PREFIX) ||
+    pathname.startsWith(FEEDBACK_PREFIX)
+  ) {
     return NextResponse.next();
   }
 
-  // Skip Next.js internals and static files
+  // Skip Next.js internals, API routes (protected by their own auth), static files
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
@@ -33,15 +42,18 @@ export default async function proxy(req: NextRequest) {
   const session = await auth();
   const isAuthenticated = !!session?.user?.id;
 
-  // Redirect unauthenticated users away from protected routes
-  if (!PUBLIC_ROUTES.includes(pathname) && !isAuthenticated) {
+  // Redirect unauthenticated users to login with a validated callbackUrl
+  if (!PUBLIC_ROUTES.has(pathname) && !isAuthenticated) {
     const loginUrl = new URL("/login", req.nextUrl);
-    loginUrl.searchParams.set("callbackUrl", pathname);
+    // Only set callbackUrl if it's a safe internal path
+    if (isSafeCallbackUrl(pathname)) {
+      loginUrl.searchParams.set("callbackUrl", pathname);
+    }
     return NextResponse.redirect(loginUrl);
   }
 
-  // Redirect authenticated users away from auth pages to dashboard
-  if (AUTH_ROUTES.includes(pathname) && isAuthenticated) {
+  // Redirect authenticated users away from auth pages
+  if (AUTH_ROUTES.has(pathname) && isAuthenticated) {
     return NextResponse.redirect(new URL("/dashboard", req.nextUrl));
   }
 

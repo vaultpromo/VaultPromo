@@ -20,6 +20,8 @@ export interface PlayerTrack {
   campaignId: string;
   /** presigned URL — fetched on demand, cached while valid */
   streamUrl: string | null;
+  /** presigned URL for cover art display in the player bar */
+  artworkUrl: string | null;
 }
 
 interface PlayerState {

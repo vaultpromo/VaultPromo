@@ -9,10 +9,6 @@ interface WorkspaceToggleProps {
   djAlias?: string | null;
 }
 
-/**
- * Workspace switcher — Sello ↔ DJ.
- * Calls a Server Action; no page reload required.
- */
 export function WorkspaceToggle({ activeWorkspace, labelName, djAlias }: WorkspaceToggleProps) {
   const [isPending, startTransition] = useTransition();
 
@@ -25,34 +21,49 @@ export function WorkspaceToggle({ activeWorkspace, labelName, djAlias }: Workspa
 
   return (
     <div
-      className="flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-900 p-1"
+      className="flex items-center rounded-md border border-white/[0.08] bg-white/[0.04] p-0.5"
       role="group"
       aria-label="Switch workspace"
     >
-      <button
+      <Tab
+        label={labelName ?? "Label"}
+        active={activeWorkspace === "label"}
+        pending={isPending}
         onClick={() => handleSwitch("label")}
-        disabled={isPending}
-        aria-pressed={activeWorkspace === "label"}
-        className={`rounded-full px-4 py-1.5 text-xs font-semibold transition ${
-          activeWorkspace === "label"
-            ? "bg-violet-600 text-white"
-            : "text-zinc-400 hover:text-white"
-        } disabled:cursor-wait`}
-      >
-        {labelName ?? "Label"}
-      </button>
-      <button
+      />
+      <Tab
+        label={djAlias ?? "DJ"}
+        active={activeWorkspace === "dj"}
+        pending={isPending}
         onClick={() => handleSwitch("dj")}
-        disabled={isPending}
-        aria-pressed={activeWorkspace === "dj"}
-        className={`rounded-full px-4 py-1.5 text-xs font-semibold transition ${
-          activeWorkspace === "dj"
-            ? "bg-violet-600 text-white"
-            : "text-zinc-400 hover:text-white"
-        } disabled:cursor-wait`}
-      >
-        {djAlias ?? "DJ"}
-      </button>
+      />
     </div>
+  );
+}
+
+function Tab({
+  label,
+  active,
+  pending,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  pending: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={pending}
+      aria-pressed={active}
+      className={`rounded px-3 py-1 text-xs font-medium transition-all disabled:cursor-wait ${
+        active
+          ? "bg-white/[0.1] text-white shadow-sm"
+          : "text-white/40 hover:text-white/70"
+      }`}
+    >
+      {label}
+    </button>
   );
 }

@@ -5,22 +5,21 @@ import { tracks, campaignDistributions, campaigns, feedback, contacts } from "@/
 import { storage } from "@/lib/storage";
 import { getPromoSession } from "@/lib/promo/session";
 import { injectWatermark } from "@/lib/watermark/id3-watermark";
+import { promoDownloadLimiter } from "@/lib/rate-limiter";
 
 /**
  * GET /api/promo/download/[trackId]?campaignId=<id>
  *
- * Returns a short-lived presigned URL to download the watermarked WAV.
+ * Streams the watermarked WAV directly to the browser with
+ * Content-Disposition: attachment so it downloads immediately
+ * without opening a new page or navigating away.
  *
  * Flow:
  * 1. Validate promo session + feedback submitted
  * 2. Fetch original WAV from R2 into memory
- * 3. Inject ID3 metadata watermark (recipient email + distributionId)
- * 4. Upload watermarked buffer to a temporary key in originals bucket
- * 5. Generate presigned URL (15 min) and return it
- * 6. Mark distribution + feedback as downloaded
- *
- * The watermarked key is scoped per distribution to avoid collisions:
- *   watermarked/<distributionId>/<trackId>.wav
+ * 3. Inject ID3 metadata watermark
+ * 4. Stream the buffer directly as the HTTP response body
+ * 5. Mark as downloaded
  */
 export async function GET(
   request: NextRequest,
@@ -31,6 +30,12 @@ export async function GET(
 
   if (!campaignId) {
     return Response.json({ error: "campaignId is required" }, { status: 400 });
+  }
+
+  // Rate limit
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  if (!promoDownloadLimiter.check(ip)) {
+    return Response.json({ error: "Too many requests" }, { status: 429 });
   }
 
   // ── Auth ────────────────────────────────────────────────────────────────
@@ -48,7 +53,7 @@ export async function GET(
   // ── Campaign expiry ─────────────────────────────────────────────────────
   const campaign = await db.query.campaigns.findFirst({
     where: eq(campaigns.id, campaignId),
-    columns: { expiryDate: true, title: true },
+    columns: { expiryDate: true, title: true, artworkUrl: true },
   });
   if (!campaign) {
     return Response.json({ error: "Campaign not found" }, { status: 404 });
@@ -81,76 +86,80 @@ export async function GET(
       key: track.originalKey,
       expiresInSeconds: 120,
     });
-    const response = await fetch(originalUrl);
-    if (!response.ok) throw new Error(`R2 fetch failed: ${response.status}`);
-    originalBuffer = Buffer.from(await response.arrayBuffer());
+    const r2Response = await fetch(originalUrl);
+    if (!r2Response.ok) throw new Error(`R2 fetch failed: ${r2Response.status}`);
+    originalBuffer = Buffer.from(await r2Response.arrayBuffer());
   } catch (err) {
     console.error("[download] Failed to fetch original from R2:", err);
     return Response.json({ error: "Could not retrieve track" }, { status: 500 });
   }
 
-  // ── Inject watermark ─────────────────────────────────────────────────────
+  // ── Fetch cover art from R2 (if available) ───────────────────────────────
+  let artworkBuffer: Buffer | undefined;
+  let artworkMime: "image/jpeg" | "image/png" = "image/jpeg";
+
+  if (campaign.artworkUrl) {
+    try {
+      const artworkUrl = await storage.getPresignedUrl({
+        bucket: "originals",
+        key: campaign.artworkUrl,
+        expiresInSeconds: 60,
+      });
+      const artworkResponse = await fetch(artworkUrl);
+      if (artworkResponse.ok) {
+        artworkBuffer = Buffer.from(await artworkResponse.arrayBuffer());
+        const ct = artworkResponse.headers.get("content-type") ?? "";
+        artworkMime = ct.includes("png") ? "image/png" : "image/jpeg";
+      }
+    } catch {
+      // Non-fatal — download proceeds without cover art
+    }
+  }
+
+  // ── Inject watermark + cover art ─────────────────────────────────────────
   const watermarkedBuffer = injectWatermark(originalBuffer, {
     recipientEmail,
     distributionId: session.id,
     campaignTitle: campaign.title,
     trackTitle: track.title,
+    artistName: track.artistName,
+    artworkBuffer,
+    artworkMime,
   });
 
-  // ── Upload watermarked buffer to R2 ──────────────────────────────────────
-  const ext = track.originalKey.split(".").pop() ?? "wav";
-  const watermarkedKey = `watermarked/${session.id}/${trackId}.${ext}`;
-
-  try {
-    await storage.upload({
-      bucket: "originals",
-      key: watermarkedKey,
-      body: watermarkedBuffer,
-      contentType: "audio/wav",
-      metadata: {
-        "recipient-email": recipientEmail,
-        "distribution-id": session.id,
-      },
-    });
-  } catch (err) {
-    console.error("[download] Failed to upload watermarked file:", err);
-    return Response.json({ error: "Download preparation failed" }, { status: 500 });
-  }
-
-  // ── Generate presigned URL (15 min) ──────────────────────────────────────
-  const url = await storage.getPresignedUrl({
-    bucket: "originals",
-    key: watermarkedKey,
-    expiresInSeconds: 900,
-  });
-
-  // ── Mark as downloaded (best-effort) ─────────────────────────────────────
-  try {
-    await Promise.all([
-      db
-        .update(campaignDistributions)
-        .set({ hasDownloaded: true, updatedAt: new Date() })
-        .where(eq(campaignDistributions.id, session.id)),
-      db
-        .update(feedback)
-        .set({ hasDownloaded: true, updatedAt: new Date() })
-        .where(
-          and(
-            eq(feedback.distributionId, session.id),
-            eq(feedback.campaignId, campaignId),
-          ),
+  // ── Mark as downloaded (best-effort, non-blocking) ────────────────────────
+  Promise.all([
+    db
+      .update(campaignDistributions)
+      .set({ hasDownloaded: true, updatedAt: new Date() })
+      .where(eq(campaignDistributions.id, session.id)),
+    db
+      .update(feedback)
+      .set({ hasDownloaded: true, updatedAt: new Date() })
+      .where(
+        and(
+          eq(feedback.distributionId, session.id),
+          eq(feedback.campaignId, campaignId),
         ),
-    ]);
-  } catch {
-    // Non-fatal
-  }
+      ),
+  ]).catch(() => {/* non-fatal */});
 
+  // ── Stream the file directly — no redirect, no new page ─────────────────
+  const ext = track.originalKey.split(".").pop() ?? "wav";
   const safeFilename = `${track.artistName} - ${track.title}.${ext}`
     .replace(/[^a-zA-Z0-9 ._-]/g, "_");
 
-  return Response.json({
-    url,
-    filename: safeFilename,
-    expiresAt: new Date(Date.now() + 900 * 1000).toISOString(),
+  const contentType = ext === "wav" ? "audio/wav" : ext === "flac" ? "audio/flac" : "audio/aiff";
+
+  return new Response(new Uint8Array(watermarkedBuffer), {
+    status: 200,
+    headers: {
+      "Content-Type": contentType,
+      // attachment forces the browser to download, never navigate or open
+      "Content-Disposition": `attachment; filename="${safeFilename}"`,
+      "Content-Length": String(watermarkedBuffer.length),
+      // Prevent caching of download links
+      "Cache-Control": "no-store",
+    },
   });
 }

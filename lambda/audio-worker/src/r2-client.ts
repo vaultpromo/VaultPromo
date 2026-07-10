@@ -1,8 +1,4 @@
-import {
-  S3Client,
-  GetObjectCommand,
-  PutObjectCommand,
-} from "@aws-sdk/client-s3";
+import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import type { Readable } from "stream";
 
 const client = new S3Client({
@@ -18,7 +14,6 @@ const client = new S3Client({
 const ORIGINALS_BUCKET = process.env.R2_BUCKET_ORIGINALS!;
 const PREVIEWS_BUCKET = process.env.R2_BUCKET_PREVIEWS!;
 
-/** Download an object from the originals bucket as a Node.js Readable stream */
 export async function downloadOriginal(key: string): Promise<Readable> {
   const response = await client.send(
     new GetObjectCommand({ Bucket: ORIGINALS_BUCKET, Key: key }),
@@ -31,7 +26,6 @@ export async function downloadOriginal(key: string): Promise<Readable> {
   return response.Body as Readable;
 }
 
-/** Upload the transcoded MP3 buffer to the previews bucket */
 export async function uploadPreview(key: string, buffer: Buffer): Promise<void> {
   await client.send(
     new PutObjectCommand({
@@ -39,7 +33,6 @@ export async function uploadPreview(key: string, buffer: Buffer): Promise<void> 
       Key: key,
       Body: buffer,
       ContentType: "audio/mpeg",
-      // Cache for 1 year — previews are immutable once created
       CacheControl: "public, max-age=31536000, immutable",
     }),
   );

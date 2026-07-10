@@ -45,7 +45,7 @@ export async function getQueue(): Promise<PgBoss> {
 
 /** Queue name constants — single source of truth */
 export const QUEUES = {
-  AUDIO_TRANSCODE: "audio:transcode",
+  AUDIO_TRANSCODE: "audio-transcode",
 } as const;
 
 /** Job payload shape */

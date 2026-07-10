@@ -5,6 +5,7 @@ import { randomUUID } from "crypto";
 import { db } from "@/db";
 import { feedback, campaignDistributions, tracks } from "@/db/schema";
 import { getPromoSession } from "@/lib/promo/session";
+import { promoFeedbackLimiter } from "@/lib/rate-limiter";
 
 const MIN_COMMENT_LENGTH = 10;
 
@@ -13,6 +14,7 @@ const bodySchema = z.object({
   distributionId: z.string().min(1),
   rating: z.number().int().min(1).max(5),
   favoriteTrackId: z.string().min(1),
+  reviewerName: z.string().min(2, "Name must be at least 2 characters.").trim(),
   comment: z
     .string()
     .min(MIN_COMMENT_LENGTH, `Comment must be at least ${MIN_COMMENT_LENGTH} characters.`)
@@ -31,7 +33,12 @@ const bodySchema = z.object({
  * Security: re-validates the session and ownership of the distributionId.
  */
 export async function POST(request: NextRequest) {
-  // ── Auth via promo session cookie ───────────────────────────────────────
+  // Rate limit
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  if (!promoFeedbackLimiter.check(ip)) {
+    return Response.json({ error: "Too many requests" }, { status: 429 });
+  }
+
   let body: unknown;
   try {
     body = await request.json();
@@ -47,7 +54,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { campaignId, distributionId, rating, favoriteTrackId, comment } = parsed.data;
+  const { campaignId, distributionId, rating, favoriteTrackId, comment, reviewerName } = parsed.data;
 
   // Verify promo session
   const session = await getPromoSession(campaignId);
@@ -91,6 +98,7 @@ export async function POST(request: NextRequest) {
       contactId: session.contactId,
       rating: String(rating) as "1" | "2" | "3" | "4" | "5",
       comment,
+      reviewerName,
       favoriteTrackId,
       hasDownloaded: false,
       submittedAt: new Date(),

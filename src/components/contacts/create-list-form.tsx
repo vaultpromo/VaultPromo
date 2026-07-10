@@ -13,45 +13,37 @@ export function CreateListForm() {
   return (
     <form action={action} className="space-y-3">
       {state?.message && (
-        <p role="alert" className="rounded bg-red-500/10 px-3 py-2 text-xs text-red-400">
+        <p role="alert" className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs text-red-400">
           {state.message}
         </p>
       )}
 
       <div className="space-y-1">
-        <label htmlFor="name" className="block text-xs font-medium text-zinc-400">
-          List name *
-        </label>
         <input
           id="name"
           name="name"
           type="text"
           required
-          placeholder="Core DJs — Europe"
-          className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-violet-500 focus:outline-none"
+          placeholder="List name"
+          className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-sm text-white placeholder-white/20 focus:border-white/20 focus:outline-none"
         />
         {state?.errors?.name && (
           <p className="text-xs text-red-400">{state.errors.name[0]}</p>
         )}
       </div>
 
-      <div className="space-y-1">
-        <label htmlFor="description" className="block text-xs font-medium text-zinc-400">
-          Description
-        </label>
-        <input
-          id="description"
-          name="description"
-          type="text"
-          placeholder="Optional description"
-          className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:border-violet-500 focus:outline-none"
-        />
-      </div>
+      <input
+        id="description"
+        name="description"
+        type="text"
+        placeholder="Description (optional)"
+        className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-sm text-white placeholder-white/20 focus:border-white/20 focus:outline-none"
+      />
 
       <button
         type="submit"
         disabled={pending}
-        className="w-full rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:opacity-60"
+        className="w-full rounded-lg border border-white/[0.1] bg-white/[0.06] py-2 text-xs font-medium text-white/80 transition hover:bg-white/[0.1] hover:text-white disabled:opacity-40"
       >
         {pending ? "Creating…" : "Create list"}
       </button>

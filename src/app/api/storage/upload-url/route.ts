@@ -1,8 +1,12 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
+import { and, eq } from "drizzle-orm";
 import { verifySession } from "@/lib/dal";
 import { storage } from "@/lib/storage";
+import { db } from "@/db";
+import { campaigns, tracks } from "@/db/schema";
 import { originalTrackKey, artworkKey } from "@/lib/storage/keys";
+import { storageUploadLimiter } from "@/lib/rate-limiter";
 
 const ALLOWED_AUDIO_TYPES = [
   "audio/wav",
@@ -16,27 +20,34 @@ const ALLOWED_AUDIO_TYPES = [
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 const MAX_AUDIO_BYTES = 500 * 1024 * 1024; // 500 MB
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;  // 10 MB
 
 const requestSchema = z.object({
   type: z.enum(["track", "artwork"]),
-  campaignId: z.string().min(1),
-  trackId: z.string().min(1).optional(),
-  contentType: z.string().min(1),
-  fileSizeBytes: z.number().positive(),
+  campaignId: z.string().uuid("Invalid campaignId"),
+  trackId: z.string().uuid("Invalid trackId").optional(),
+  contentType: z.string().min(1).max(100),
+  fileSizeBytes: z.number().int().positive(),
 });
 
 /**
  * POST /api/storage/upload-url
  *
- * Returns a presigned PUT URL that allows the browser to upload directly
- * to Cloudflare R2 without routing binary data through the Next.js process.
+ * Returns a presigned PUT URL for direct browser-to-R2 upload.
  *
- * Auth: requires a valid session (label workspace implied — checked in actions).
+ * Security:
+ * - Verifies the campaignId belongs to the authenticated user
+ * - For tracks, also verifies the trackId belongs to that campaign
+ * - Prevents a user from uploading to another user's campaign path
  */
 export async function POST(request: NextRequest) {
-  // Verify the user is authenticated
-  await verifySession();
+  const { userId } = await verifySession();
+
+  // Rate limit by IP
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  if (!storageUploadLimiter.check(ip)) {
+    return Response.json({ error: "Too many requests" }, { status: 429 });
+  }
 
   let body: unknown;
   try {
@@ -47,15 +58,22 @@ export async function POST(request: NextRequest) {
 
   const parsed = requestSchema.safeParse(body);
   if (!parsed.success) {
-    return Response.json(
-      { error: "Invalid request", details: parsed.error.flatten() },
-      { status: 400 },
-    );
+    return Response.json({ error: "Invalid request", details: parsed.error.flatten() }, { status: 400 });
   }
 
   const { type, campaignId, trackId, contentType, fileSizeBytes } = parsed.data;
 
-  // Validate by asset type
+  // ── Ownership check: campaign must belong to this user ─────────────────
+  const campaign = await db.query.campaigns.findFirst({
+    where: and(eq(campaigns.id, campaignId), eq(campaigns.userId, userId)),
+    columns: { id: true },
+  });
+
+  if (!campaign) {
+    return Response.json({ error: "Not found" }, { status: 404 });
+  }
+
+  // ── Track upload ────────────────────────────────────────────────────────
   if (type === "track") {
     if (!trackId) {
       return Response.json({ error: "trackId is required for track uploads" }, { status: 400 });
@@ -67,19 +85,29 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: "File too large (max 500 MB)" }, { status: 413 });
     }
 
+    // Verify the track belongs to this campaign
+    const track = await db.query.tracks.findFirst({
+      where: and(eq(tracks.id, trackId), eq(tracks.campaignId, campaignId)),
+      columns: { id: true },
+    });
+
+    if (!track) {
+      return Response.json({ error: "Not found" }, { status: 404 });
+    }
+
     const key = originalTrackKey(campaignId, trackId, contentType);
     const url = await storage.getPresignedUploadUrl({
       bucket: "originals",
       key,
       contentType,
-      expiresInSeconds: 900, // 15 min
+      expiresInSeconds: 900,
       maxSizeBytes: MAX_AUDIO_BYTES,
     });
 
     return Response.json({ url, key });
   }
 
-  // artwork
+  // ── Artwork upload ──────────────────────────────────────────────────────
   if (!ALLOWED_IMAGE_TYPES.includes(contentType)) {
     return Response.json({ error: "Unsupported image format" }, { status: 415 });
   }
@@ -92,7 +120,7 @@ export async function POST(request: NextRequest) {
     bucket: "originals",
     key,
     contentType,
-    expiresInSeconds: 300, // 5 min
+    expiresInSeconds: 300,
     maxSizeBytes: MAX_IMAGE_BYTES,
   });
 

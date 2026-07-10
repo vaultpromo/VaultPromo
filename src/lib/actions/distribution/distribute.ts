@@ -122,7 +122,8 @@ export async function distributeCampaignAction(
     }
 
     const token = generateDeliveryToken();
-    const promoUrl = `${appUrl}/promo/${campaignId}?token=${token}`;
+    // Link goes to the Route Handler that sets the cookie and redirects
+    const promoUrl = `${appUrl}/api/promo/enter?token=${token}&campaign=${campaignId}`;
 
     // Create distribution row first (so the link is valid even if email fails)
     const distributionId = crypto.randomUUID();
