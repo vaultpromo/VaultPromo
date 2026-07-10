@@ -1,8 +1,8 @@
 "use client";
 
+import { useRef, useCallback } from "react";
 import { useAudioPlayer } from "./audio-player-context";
 
-/** Format seconds as M:SS */
 function formatTime(seconds: number): string {
   if (isNaN(seconds) || seconds < 0) return "0:00";
   const m = Math.floor(seconds / 60);
@@ -11,73 +11,143 @@ function formatTime(seconds: number): string {
 }
 
 /**
- * Persistent audio bar — anchored to the bottom of the screen.
- * Only visible when a track is loaded.
- * Lives in the AudioPlayerProvider so it persists across navigations.
+ * Persistent audio player — bottom bar.
+ *
+ * Design goals:
+ * - Scrub bar is tall enough to click/tap accurately (h-2 track, large hit area)
+ * - Draggable scrub — mousedown + mousemove, not just click
+ * - Cover art visible
+ * - Skip ±15s buttons for quick navigation
+ * - Keyboard accessible (arrow keys on the scrub bar)
  */
 export function PersistentAudioBar() {
   const { state, togglePlay, seek, setVolume } = useAudioPlayer();
   const { currentTrack, isPlaying, isLoading, currentTime, duration, volume } = state;
-
-  if (!currentTrack) return null;
+  const scrubRef = useRef<HTMLDivElement>(null);
+  const isDragging = useRef(false);
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+  // ── Scrub helpers ──────────────────────────────────────────────────────
+  const seekFromEvent = useCallback(
+    (e: React.MouseEvent | MouseEvent) => {
+      if (!scrubRef.current || !duration) return;
+      const rect = scrubRef.current.getBoundingClientRect();
+      const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      seek(ratio * duration);
+    },
+    [duration, seek],
+  );
+
+  function handleMouseDown(e: React.MouseEvent) {
+    isDragging.current = true;
+    seekFromEvent(e);
+
+    const onMove = (ev: MouseEvent) => {
+      if (isDragging.current) seekFromEvent(ev);
+    };
+    const onUp = () => {
+      isDragging.current = false;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+
+  // Touch support
+  function handleTouchMove(e: React.TouchEvent) {
+    if (!scrubRef.current || !duration) return;
+    const touch = e.touches[0];
+    const rect = scrubRef.current.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
+    seek(ratio * duration);
+  }
+
+  if (!currentTrack) return null;
 
   return (
     <div
       role="region"
       aria-label="Audio player"
-      className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-800 bg-zinc-900/95 px-4 py-3 backdrop-blur"
+      className="fixed bottom-0 left-0 right-0 z-50 bg-[#111]/95 backdrop-blur-md"
+      style={{ boxShadow: "0 -1px 0 rgba(255,255,255,0.06)" }}
     >
-      {/* Progress bar */}
+      {/* ── Scrub bar — full width, tall hit area ──────────────────────── */}
       <div
-        className="absolute top-0 left-0 right-0 h-0.5 bg-zinc-800 cursor-pointer"
-        onClick={(e) => {
-          const rect = e.currentTarget.getBoundingClientRect();
-          const ratio = (e.clientX - rect.left) / rect.width;
-          seek(ratio * duration);
-        }}
+        ref={scrubRef}
         role="slider"
         aria-label="Seek"
         aria-valuenow={Math.round(currentTime)}
         aria-valuemin={0}
         aria-valuemax={Math.round(duration)}
         tabIndex={0}
+        className="group relative h-7 w-full cursor-pointer select-none"
+        onMouseDown={handleMouseDown}
+        onTouchMove={handleTouchMove}
+        onTouchStart={(e) => handleTouchMove(e)}
         onKeyDown={(e) => {
-          if (e.key === "ArrowRight") seek(Math.min(currentTime + 10, duration));
-          if (e.key === "ArrowLeft") seek(Math.max(currentTime - 10, 0));
+          if (e.key === "ArrowRight") seek(Math.min(currentTime + 5, duration));
+          if (e.key === "ArrowLeft") seek(Math.max(currentTime - 5, 0));
         }}
       >
+        {/* Track background */}
+        <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 overflow-hidden rounded-full bg-white/[0.08] group-hover:h-2 transition-all duration-100">
+          {/* Buffered / played */}
+          <div
+            className="h-full rounded-full bg-violet-500 transition-none"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+
+        {/* Scrub thumb — appears on hover/drag */}
         <div
-          className="h-full bg-violet-500 transition-all"
-          style={{ width: `${progress}%` }}
+          className="absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white opacity-0 shadow transition-opacity group-hover:opacity-100"
+          style={{ left: `${progress}%` }}
+          aria-hidden
         />
+
+        {/* Time tooltip overlay */}
+        <div className="absolute inset-x-0 bottom-full mb-1 flex justify-between px-3 text-[10px] tabular-nums text-white/30 pointer-events-none">
+          <span>{formatTime(currentTime)}</span>
+          <span>{formatTime(duration)}</span>
+        </div>
       </div>
 
-      <div className="flex items-center gap-4">
-        {/* Cover art thumbnail */}
+      {/* ── Controls row ──────────────────────────────────────────────── */}
+      <div className="mx-auto flex max-w-4xl items-center gap-3 px-4 pb-3 pt-1">
+        {/* Cover art */}
         {currentTrack.artworkUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={currentTrack.artworkUrl}
             alt="Cover"
-            className="h-9 w-9 shrink-0 rounded object-cover"
+            className="h-10 w-10 shrink-0 rounded object-cover"
           />
         ) : (
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-white/[0.06] text-sm text-white/20">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-white/[0.06] text-base text-white/20">
             ♪
           </div>
         )}
 
-        {/* Play/Pause */}
+        {/* Skip back 15s */}
+        <button
+          onClick={() => seek(Math.max(0, currentTime - 15))}
+          aria-label="Back 15 seconds"
+          className="hidden shrink-0 text-white/40 transition hover:text-white sm:block"
+        >
+          <SkipBackIcon />
+        </button>
+
+        {/* Play / Pause */}
         <button
           onClick={togglePlay}
           disabled={isLoading}
           aria-label={isPlaying ? "Pause" : "Play"}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-violet-600 text-white transition hover:bg-violet-500 disabled:cursor-wait disabled:opacity-60"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-black transition hover:bg-white/90 disabled:cursor-wait disabled:opacity-50"
         >
           {isLoading ? (
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-black border-t-transparent" />
           ) : isPlaying ? (
             <PauseIcon />
           ) : (
@@ -85,30 +155,34 @@ export function PersistentAudioBar() {
           )}
         </button>
 
+        {/* Skip forward 15s */}
+        <button
+          onClick={() => seek(Math.min(duration, currentTime + 15))}
+          aria-label="Forward 15 seconds"
+          className="hidden shrink-0 text-white/40 transition hover:text-white sm:block"
+        >
+          <SkipForwardIcon />
+        </button>
+
         {/* Track info */}
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-white">
+          <p className="truncate text-sm font-medium text-white/90">
             {currentTrack.title}
             {currentTrack.mixVersion && (
-              <span className="ml-2 text-xs font-normal text-zinc-400">
+              <span className="ml-2 text-xs font-normal text-white/35">
                 {currentTrack.mixVersion}
               </span>
             )}
           </p>
-          <p className="truncate text-xs text-zinc-400">{currentTrack.artistName}</p>
-        </div>
-
-        {/* Time */}
-        <div className="shrink-0 text-xs tabular-nums text-zinc-400">
-          {formatTime(currentTime)} / {formatTime(duration)}
+          <p className="truncate text-xs text-white/35">{currentTrack.artistName}</p>
         </div>
 
         {/* Volume */}
-        <div className="hidden shrink-0 items-center gap-1.5 sm:flex">
+        <div className="hidden shrink-0 items-center gap-2 sm:flex">
           <button
-            onClick={() => setVolume(volume === 0 ? 1 : 0)}
+            onClick={() => setVolume(volume === 0 ? 0.8 : 0)}
             aria-label={volume === 0 ? "Unmute" : "Mute"}
-            className="text-zinc-400 hover:text-white"
+            className="text-white/30 transition hover:text-white/70"
           >
             {volume === 0 ? <MuteIcon /> : <VolumeIcon />}
           </button>
@@ -116,26 +190,28 @@ export function PersistentAudioBar() {
             type="range"
             min={0}
             max={1}
-            step={0.05}
+            step={0.02}
             value={volume}
             onChange={(e) => setVolume(Number(e.target.value))}
             aria-label="Volume"
-            className="h-1 w-20 cursor-pointer accent-violet-500"
+            className="h-1 w-20 cursor-pointer accent-white"
           />
         </div>
 
-        {/* Preview label */}
-        <span className="hidden shrink-0 rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-500 sm:block">
-          128k preview
+        {/* Preview badge */}
+        <span className="hidden shrink-0 rounded border border-white/[0.07] px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-widest text-white/20 sm:block">
+          Preview
         </span>
       </div>
     </div>
   );
 }
 
+// ── Icons ────────────────────────────────────────────────────────────────────
+
 function PlayIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4" aria-hidden>
+    <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4 translate-x-px" aria-hidden>
       <path d="M8 5v14l11-7z" />
     </svg>
   );
@@ -145,6 +221,24 @@ function PauseIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4" aria-hidden>
       <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+    </svg>
+  );
+}
+
+function SkipBackIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5" aria-hidden>
+      <path d="M11.99 5V1l-5 5 5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6h-2c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z" />
+      <text x="7" y="14.5" fontSize="5.5" fontFamily="system-ui" fontWeight="bold" fill="currentColor">15</text>
+    </svg>
+  );
+}
+
+function SkipForwardIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5" aria-hidden>
+      <path d="M12.01 5V1l5 5-5 5V7c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6h2c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8z" />
+      <text x="7" y="14.5" fontSize="5.5" fontFamily="system-ui" fontWeight="bold" fill="currentColor">15</text>
     </svg>
   );
 }
