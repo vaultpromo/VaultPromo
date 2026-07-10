@@ -4,6 +4,7 @@ import Link from "next/link";
 import { verifySession } from "@/lib/dal";
 import { db } from "@/db";
 import { campaigns, campaignDistributions, feedback, contacts } from "@/db/schema";
+import { CopyLinkButton } from "@/components/campaigns/copy-link-button";
 
 /**
  * Campaign analytics page — Label mode.
@@ -51,12 +52,13 @@ export default async function CampaignAnalyticsPage(
   const feedbackCount = Number(metrics?.feedbackCount ?? 0);
   const downloaded = Number(metrics?.downloaded ?? 0);
 
-  // ── Per-contact breakdown ────────────────────────────────────────────────
+  // ── Per-contact breakdown (including delivery tokens for manual resend) ─
   const contactRows = await db
     .select({
       email: contacts.email,
       name: contacts.name,
       alias: contacts.alias,
+      deliveryToken: campaignDistributions.deliveryToken,
       emailSentAt: campaignDistributions.emailSentAt,
       emailOpenedAt: campaignDistributions.emailOpenedAt,
       feedbackSubmitted: campaignDistributions.feedbackSubmitted,
@@ -66,6 +68,8 @@ export default async function CampaignAnalyticsPage(
     .innerJoin(contacts, eq(campaignDistributions.contactId, contacts.id))
     .where(eq(campaignDistributions.campaignId, campaignId))
     .orderBy(campaignDistributions.emailSentAt);
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://vault-promo.vercel.app";
 
   // ── Feedback comments ────────────────────────────────────────────────────
   const feedbackRows = await db
@@ -97,12 +101,22 @@ export default async function CampaignAnalyticsPage(
         </Link>
         <h1 className="mt-2 text-2xl font-bold text-white">{campaign.title} — Analytics</h1>
         <p className="mt-1 text-sm text-zinc-400">{campaign.artistName}</p>
-        <p className="mt-2 text-xs text-white/30">
-          Share with artist:{" "}
-          <span className="font-mono text-white/50">
-            {process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/feedback/{campaignId}
-          </span>
-        </p>
+
+        {/* Artist feedback link */}
+        <div className="mt-3 flex items-center gap-2">
+          <p className="text-xs text-white/30">Artist feedback page:</p>
+          <code className="rounded bg-white/[0.04] px-2 py-0.5 text-xs text-white/50">
+            {appUrl}/feedback/{campaignId}
+          </code>
+          <CopyLinkButton url={`${appUrl}/feedback/${campaignId}`} label="Copy" />
+          <Link
+            href={`/feedback/${campaignId}`}
+            target="_blank"
+            className="text-xs text-white/30 hover:text-white/60"
+          >
+            Open ↗
+          </Link>
+        </div>
       </div>
 
       {/* Funnel metrics */}
@@ -128,6 +142,7 @@ export default async function CampaignAnalyticsPage(
                   <th className="px-4 py-3 font-medium">Opened</th>
                   <th className="px-4 py-3 font-medium">Feedback</th>
                   <th className="px-4 py-3 font-medium">Downloaded</th>
+                  <th className="px-4 py-3 font-medium">Link</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800 bg-zinc-950">
@@ -162,6 +177,12 @@ export default async function CampaignAnalyticsPage(
                       ) : (
                         <span className="text-zinc-600">No</span>
                       )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <CopyLinkButton
+                        url={`${appUrl}/api/promo/enter?token=${row.deliveryToken}&campaign=${campaignId}`}
+                        label="Copy"
+                      />
                     </td>
                   </tr>
                 ))}

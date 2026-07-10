@@ -69,9 +69,11 @@ export async function GET(request: NextRequest) {
       .where(eq(campaignDistributions.id, distribution.id));
   }
 
-  // Set cookie and redirect to promo page
+  // Set cookie and redirect to promo page — using 303 See Other so the
+  // token URL is NOT stored in browser history (back button won't reveal it)
   const response = NextResponse.redirect(
     new URL(`/promo/${campaignId}`, request.nextUrl.origin),
+    { status: 303 },
   );
 
   response.cookies.set(promoSessionKey(campaignId), token, {
