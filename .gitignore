@@ -50,3 +50,10 @@ next-env.d.ts
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# Lambda FFmpeg binary — large file, not needed in repo
+# Download separately: https://johnvansickle.com/ffmpeg/
+lambda/audio-worker/bin/
+lambda/audio-worker/dist/
+lambda/audio-worker/node_modules/
+lambda/audio-worker/worker.zip
