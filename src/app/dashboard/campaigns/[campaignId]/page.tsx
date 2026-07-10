@@ -3,13 +3,14 @@ import { eq, and, asc } from "drizzle-orm";
 import Link from "next/link";
 import { verifySession } from "@/lib/dal";
 import { db } from "@/db";
-import { campaigns, tracks, mailingLists } from "@/db/schema";
+import { campaigns, tracks, mailingLists, campaignDistributions, contacts } from "@/db/schema";
 import { storage } from "@/lib/storage";
 import { TrackList } from "@/components/campaigns/track-list";
 import { AddTrackForm } from "@/components/campaigns/add-track-form";
 import { DistributeForm } from "@/components/distribution/distribute-form";
 import { TranscodeAllButton } from "@/components/campaigns/transcode-all-button";
 import { ArtworkSection } from "@/components/campaigns/artwork-section";
+import { CopyLinkButton } from "@/components/campaigns/copy-link-button";
 import { deleteCampaignAction } from "@/lib/actions/campaigns";
 
 export default async function CampaignDetailPage(props: PageProps<"/dashboard/campaigns/[campaignId]">) {
@@ -31,6 +32,23 @@ export default async function CampaignDetailPage(props: PageProps<"/dashboard/ca
   ]);
 
   if (!campaign) notFound();
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://vault-promo.vercel.app";
+
+  // Fetch distributions to show individual promo links
+  const distributions = await db
+    .select({
+      deliveryToken: campaignDistributions.deliveryToken,
+      contactEmail: contacts.email,
+      contactName: contacts.name,
+      contactAlias: contacts.alias,
+      emailSentAt: campaignDistributions.emailSentAt,
+      feedbackSubmitted: campaignDistributions.feedbackSubmitted,
+    })
+    .from(campaignDistributions)
+    .innerJoin(contacts, eq(campaignDistributions.contactId, contacts.id))
+    .where(eq(campaignDistributions.campaignId, campaignId))
+    .orderBy(campaignDistributions.emailSentAt);
 
   // Generate presigned URL for artwork preview if artwork exists
   let artworkPresignedUrl: string | null = null;
@@ -80,6 +98,10 @@ export default async function CampaignDetailPage(props: PageProps<"/dashboard/ca
           >
             Artist view ↗
           </Link>
+          <CopyLinkButton
+            url={`${appUrl}/feedback/${campaignId}`}
+            label="Copy artist link"
+          />
           <form
             action={async () => {
               "use server";
@@ -138,6 +160,39 @@ export default async function CampaignDetailPage(props: PageProps<"/dashboard/ca
           <AddTrackForm campaignId={campaignId} nextPosition={campaignTracks.length + 1} />
         </div>
       </div>
+      {/* Promo links — one per recipient */}
+      {distributions.length > 0 && (
+        <div className="rounded-xl border border-white/[0.06] bg-white/[0.01] p-5">
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-white/30">
+            Promo links — {distributions.length} sent
+          </h2>
+          <div className="space-y-1.5 max-h-56 overflow-y-auto">
+            {distributions.map((d) => (
+              <div
+                key={d.deliveryToken}
+                className="flex items-center justify-between gap-3 rounded-lg border border-white/[0.05] px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-medium text-white/70">
+                    {d.contactName ?? d.contactAlias ?? d.contactEmail}
+                  </p>
+                  <p className="truncate text-[10px] text-white/25">{d.contactEmail}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {d.feedbackSubmitted && (
+                    <span className="text-[10px] text-emerald-400">✓ Feedback</span>
+                  )}
+                  <CopyLinkButton
+                    url={`${appUrl}/api/promo/enter?token=${d.deliveryToken}&campaign=${campaignId}`}
+                    label="Copy link"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Distribution section */}
       <DistributeForm campaignId={campaignId} lists={userLists} />
 
