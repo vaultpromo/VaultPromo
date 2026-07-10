@@ -42,7 +42,16 @@ export const profiles = pgTable("profiles", {
 
   // DJ / receiver info
   djAlias: text("dj_alias"),
-  djGenres: text("dj_genres"),
+  djGenres: text("dj_genres"), // comma-separated, e.g. "techno,industrial,ambient"
+  djCity: text("dj_city"),
+  djCountry: text("dj_country"), // ISO-2, e.g. "ES"
+  djType: text("dj_type", { enum: ["dj", "radio", "press", "producer", "other"] }),
+
+  // PromoVault Network — opt-in to appear in the tastemaker directory
+  // When true, the user's DJ profile is visible to labels on the platform.
+  // Governed by Terms of Service. Default false — never pre-selected.
+  discoverable: boolean("discoverable").notNull().default(false),
+  discoverableUpdatedAt: timestamp("discoverable_updated_at", { mode: "date" }),
 
   // Workspace switcher
   activeWorkspace: text("active_workspace", { enum: ["label", "dj"] })

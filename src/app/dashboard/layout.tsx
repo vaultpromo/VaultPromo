@@ -33,10 +33,14 @@ export default async function DashboardLayout({
                 <>
                   <NavLink href="/dashboard/campaigns">Campaigns</NavLink>
                   <NavLink href="/dashboard/contacts">Contacts</NavLink>
+                  <NavLink href="/dashboard/discover">Discover</NavLink>
                 </>
               ) : (
-                <NavLink href="/dashboard/promos">Promo Box</NavLink>
+                <>
+                  <NavLink href="/dashboard/promos">Promo Box</NavLink>
+                </>
               )}
+              <NavLink href="/dashboard/settings">Settings</NavLink>
             </nav>
           </div>
 
