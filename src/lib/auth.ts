@@ -1,39 +1,25 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
-import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { randomUUID } from "crypto";
 import { db } from "@/db";
-import { users, accounts, sessions, verificationTokens, authenticators, profiles } from "@/db/schema";
+import { users, accounts, profiles } from "@/db/schema";
 import { loginSchema } from "@/lib/validations/auth";
 
 /**
- * Central Auth.js v5 configuration.
+ * Auth.js v5 — JWT strategy.
  *
- * Strategy: "database" — required for OAuth providers (Google).
- * Sessions are stored in the Neon DB via DrizzleAdapter.
+ * JWT strategy is required for Credentials provider to work.
+ * Google OAuth is handled by creating/finding the user manually in the
+ * signIn callback, then returning the user id in the JWT.
  *
- * Credentials provider: looks up the user and verifies bcrypt hash directly,
- * bypassing the adapter's OAuth flow.
- *
- * Google provider: handled entirely by the adapter — creates the user,
- * account, and session automatically on first sign-in.
- *
- * Profile creation: the `signIn` callback creates a default profile row
- * for new users (Google sign-ins) so the dashboard always has a profile.
+ * No DrizzleAdapter — we manage users and profiles ourselves for both
+ * providers. This avoids the Credentials + database strategy incompatibility.
  */
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: DrizzleAdapter(db, {
-    usersTable: users,
-    accountsTable: accounts,
-    sessionsTable: sessions,
-    verificationTokensTable: verificationTokens,
-    authenticatorsTable: authenticators,
-  }),
-
-  session: { strategy: "database" },
+  session: { strategy: "jwt" },
 
   pages: {
     signIn: "/login",
@@ -42,19 +28,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
   providers: [
     // ── Google OAuth ──────────────────────────────────────────────────────
-    // Credentials are optional — the app works without them (Google sign-in
-    // disabled if env vars not set). Set GOOGLE_CLIENT_ID and
-    // GOOGLE_CLIENT_SECRET to enable.
     ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
       ? [
           Google({
             clientId: process.env.GOOGLE_CLIENT_ID,
             clientSecret: process.env.GOOGLE_CLIENT_SECRET,
             authorization: {
-              params: {
-                // Request email + profile scopes only — no extra permissions
-                scope: "openid email profile",
-              },
+              params: { scope: "openid email profile" },
             },
           }),
         ]
@@ -92,38 +72,78 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
 
   callbacks: {
-    async session({ session, user }) {
-      // With database strategy, `user` is the DB user object
-      if (session.user && user) {
-        session.user.id = user.id;
+    /**
+     * JWT callback — runs on every sign-in and session access.
+     * For Google: find-or-create the user + profile in our DB.
+     * For Credentials: user.id is already set by authorize().
+     */
+    async jwt({ token, user, account, profile }) {
+      // On initial sign-in, `user` is populated
+      if (user) {
+        token.id = user.id;
       }
-      return session;
-    },
 
-    async signIn({ user, account }) {
-      // For OAuth sign-ins (Google), create a default profile if it doesn't exist
-      if (account?.provider === "google" && user.id) {
-        const existingProfile = await db.query.profiles.findFirst({
-          where: eq(profiles.userId, user.id),
-          columns: { id: true },
+      // Google sign-in: find-or-create user in our DB
+      if (account?.provider === "google" && profile?.email) {
+        const email = profile.email.toLowerCase();
+
+        let dbUser = await db.query.users.findFirst({
+          where: eq(users.email, email),
+          columns: { id: true, name: true, email: true },
         });
 
-        if (!existingProfile) {
-          await db.insert(profiles).values({
-            id: randomUUID(),
-            userId: user.id,
-            // Use the Google display name as the label name by default
-            labelName: user.name ?? null,
-            activeWorkspace: "label",
-            storageQuotaBytes: "2147483648", // 2 GB (free plan)
-            storageUsedBytes: "0",
-            planTier: "free",
+        if (!dbUser) {
+          // New Google user — create user + profile
+          const userId = randomUUID();
+          await db.insert(users).values({
+            id: userId,
+            name: (profile.name as string) ?? null,
+            email,
+            emailVerified: new Date(),
+            image: (profile.picture as string) ?? null,
             createdAt: new Date(),
             updatedAt: new Date(),
           });
+
+          await db.insert(accounts).values({
+            userId,
+            type: "oauth",
+            provider: "google",
+            providerAccountId: account.providerAccountId,
+            access_token: account.access_token ?? null,
+            refresh_token: account.refresh_token ?? null,
+            expires_at: account.expires_at ?? null,
+            token_type: account.token_type ?? null,
+            scope: account.scope ?? null,
+            id_token: account.id_token ?? null,
+          });
+
+          await db.insert(profiles).values({
+            id: randomUUID(),
+            userId,
+            labelName: (profile.name as string) ?? null,
+            activeWorkspace: "label",
+            planTier: "free",
+            storageQuotaBytes: String(2 * 1024 ** 3),
+            storageUsedBytes: "0",
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          });
+
+          token.id = userId;
+        } else {
+          token.id = dbUser.id;
         }
       }
-      return true;
+
+      return token;
+    },
+
+    async session({ session, token }) {
+      if (session.user && token.id) {
+        session.user.id = token.id as string;
+      }
+      return session;
     },
   },
 });
