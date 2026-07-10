@@ -21,7 +21,7 @@ function getClient(): Resend {
 export class ResendEmailProvider implements EmailProvider {
   async send(options: SendEmailOptions): Promise<SendEmailResult> {
     const client = getClient();
-    const from = options.from ?? process.env.EMAIL_FROM ?? "noreply@promovault.app";
+    const from = options.from ?? process.env.EMAIL_FROM ?? "noreply@VaultPromo.app";
 
     const { data, error } = await client.emails.send({
       from,

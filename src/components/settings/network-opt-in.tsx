@@ -9,7 +9,7 @@ interface NetworkOptInProps {
 }
 
 /**
- * PromoVault Network opt-in toggle.
+ * VaultPromo Network opt-in toggle.
  *
  * Legal basis: explicit opt-in with clear explanation of what it means.
  * Users can opt out at any time.
@@ -31,7 +31,7 @@ export function NetworkOptIn({ discoverable: initialValue, djAlias }: NetworkOpt
             Appear in the tastemaker directory
           </p>
           <p className="text-xs text-white/35">
-            Allow labels on PromoVault to find your DJ profile and add you to their promo lists.
+            Allow labels on VaultPromo to find your DJ profile and add you to their promo lists.
             {djAlias
               ? ` Your profile will be listed as "${djAlias}".`
               : " Complete your DJ profile above to set your alias first."}
@@ -58,7 +58,7 @@ export function NetworkOptIn({ discoverable: initialValue, djAlias }: NetworkOpt
 
       {/* Terms notice — always visible, not a separate checkbox */}
       <p className="text-[10px] text-white/20 leading-relaxed">
-        By enabling this, you agree to PromoVault&apos;s{" "}
+        By enabling this, you agree to VaultPromo&apos;s{" "}
         <a href="/terms" className="underline underline-offset-2 hover:text-white/40">
           Terms of Service
         </a>
@@ -69,7 +69,7 @@ export function NetworkOptIn({ discoverable: initialValue, djAlias }: NetworkOpt
       {enabled && (
         <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2">
           <p className="text-xs text-emerald-400">
-            ✓ Your profile is visible in the PromoVault network.
+            ✓ Your profile is visible in the VaultPromo network.
             Labels can find you and add you to their lists.
           </p>
         </div>

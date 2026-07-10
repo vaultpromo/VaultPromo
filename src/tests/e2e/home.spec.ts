@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 test.describe("Home page smoke test", () => {
   test("loads and shows the platform name", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: /promovault/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /VaultPromo/i })).toBeVisible();
   });
 
   test("get started link is present and points to /login", async ({ page }) => {

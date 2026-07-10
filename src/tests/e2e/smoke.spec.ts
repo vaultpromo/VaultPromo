@@ -12,8 +12,8 @@ import { test, expect } from "@playwright/test";
 test.describe("Public routes smoke test", () => {
   test("home page loads and shows platform name", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: /promovault/i })).toBeVisible();
-    await expect(page).toHaveTitle(/PromoVault/i);
+    await expect(page.getByRole("heading", { name: /VaultPromo/i })).toBeVisible();
+    await expect(page).toHaveTitle(/VaultPromo/i);
   });
 
   test("login page renders sign-in form", async ({ page }) => {

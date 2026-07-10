@@ -39,7 +39,7 @@ export function DjProfileForm({
   return (
     <form action={action} className="space-y-4">
       <p className="text-xs text-white/25">
-        This information helps labels find you in the PromoVault tastemaker network.
+        This information helps labels find you in the VaultPromo tastemaker network.
       </p>
 
       <div className="grid gap-4 sm:grid-cols-2">

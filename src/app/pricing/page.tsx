@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 
 const plans = [
   {
@@ -13,7 +14,7 @@ const plans = [
       "2 GB storage",
       "Feedback gate + downloads",
       "Artist feedback page",
-      "PromoVault branding on emails",
+      "VaultPromo branding on emails",
     ],
     cta: "Get started free",
     href: "/signup",
@@ -63,12 +64,9 @@ export default function PricingPage() {
       {/* Nav */}
       <header className="border-b border-white/[0.05] px-6 py-4">
         <div className="mx-auto flex max-w-5xl items-center justify-between">
-          <Link
-            href="/"
-            className="text-[11px] font-bold tracking-[0.2em] text-white/60 uppercase"
-          >
-            PromoVault
-          </Link>
+          <Link href="/" className="flex items-center">
+              <Image src="/logo-vaultpromo.png" alt="VaultPromo" width={120} height={32} className="h-7 w-auto object-contain" />
+            </Link>
           <div className="flex items-center gap-4">
             <Link href="/login" className="text-sm text-white/40 hover:text-white/70">
               Sign in

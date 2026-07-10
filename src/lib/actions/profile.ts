@@ -49,7 +49,7 @@ export async function updateDjProfileAction(
 }
 
 /**
- * Toggle PromoVault Network opt-in.
+ * Toggle VaultPromo Network opt-in.
  *
  * When discoverable = true the user's DJ profile appears in the tastemaker
  * directory visible to labels on the platform. This is governed by the

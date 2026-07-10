@@ -49,7 +49,7 @@ export default async function FeedbackPage(props: PageProps<"/feedback/[campaign
     <div className="min-h-screen bg-[#0a0a0a] text-white">
       <header className="border-b border-white/[0.06] px-6 py-4">
         <span className="text-[11px] font-bold tracking-[0.2em] text-white/40 uppercase">
-          PromoVault
+          VaultPromo
         </span>
       </header>
 

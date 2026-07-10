@@ -8,7 +8,7 @@ import { db } from "@/db";
 import { users, profiles, contacts, mailingLists, mailingListContacts } from "@/db/schema";
 
 /**
- * Add a PromoVault Network tastemaker to one of the label's mailing lists.
+ * Add a VaultPromo Network tastemaker to one of the label's mailing lists.
  *
  * Privacy contract:
  * - The label passes the DJ's userId (opaque identifier), NOT their email
@@ -73,7 +73,7 @@ export async function addNetworkTastemaker({
       alias: djProfile.djAlias ?? null,
       city: djProfile.djCity ?? null,
       country: djProfile.djCountry ?? null,
-      notes: `Added via PromoVault Network. Genres: ${djProfile.djGenres ?? "—"}`,
+      notes: `Added via VaultPromo Network. Genres: ${djProfile.djGenres ?? "—"}`,
       unsubscribed: false,
       createdAt: new Date(),
       updatedAt: new Date(),

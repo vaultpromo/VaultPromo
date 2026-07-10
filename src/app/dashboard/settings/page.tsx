@@ -49,10 +49,10 @@ export default async function SettingsPage() {
         </div>
       </section>
 
-      {/* PromoVault Network opt-in */}
+      {/* VaultPromo Network opt-in */}
       <section className="space-y-3">
         <h2 className="text-xs font-semibold uppercase tracking-widest text-white/30">
-          PromoVault Network
+          VaultPromo Network
         </h2>
         <NetworkOptIn
           discoverable={profile.discoverable}

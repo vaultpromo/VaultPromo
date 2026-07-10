@@ -58,7 +58,7 @@ export function renderPromoInviteHtml(data: PromoInviteData): string {
           <tr>
             <td style="padding-bottom:32px;">
               <span style="color:#8b5cf6;font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;">
-                PromoVault
+                VaultPromo
               </span>
             </td>
           </tr>
@@ -117,7 +117,7 @@ export function renderPromoInviteHtml(data: PromoInviteData): string {
           <tr>
             <td style="padding-top:24px;">
               <p style="color:#3f3f46;font-size:11px;text-align:center;margin:0;">
-                This email was sent to ${data.recipientEmail} by ${data.senderName} via PromoVault.<br>
+                This email was sent to ${data.recipientEmail} by ${data.senderName} via VaultPromo.<br>
                 If you did not expect this, you can safely ignore it.
               </p>
             </td>
@@ -152,6 +152,6 @@ ${data.promoUrl}
 Stream the preview freely. Download high-quality files after submitting feedback.${expiry}
 
 ---
-This email was sent to ${data.recipientEmail} by ${data.senderName} via PromoVault.
+This email was sent to ${data.recipientEmail} by ${data.senderName} via VaultPromo.
 `;
 }

@@ -5,7 +5,7 @@ import HomePage from "@/app/page";
 describe("HomePage", () => {
   it("renders the platform name", () => {
     render(<HomePage />);
-    expect(screen.getByRole("heading", { name: /promovault/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /VaultPromo/i })).toBeInTheDocument();
   });
 
   it("renders get started link pointing to /login", () => {

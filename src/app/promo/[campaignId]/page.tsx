@@ -78,7 +78,7 @@ export default async function PromoPage(props: PageProps<"/promo/[campaignId]">)
       {/* Header */}
       <header className="border-b border-white/[0.06] px-6 py-4">
         <span className="text-[11px] font-bold tracking-[0.2em] text-white/60 uppercase">
-          PromoVault
+          VaultPromo
         </span>
       </header>
 
@@ -188,7 +188,7 @@ function TokenErrorPage({
     <div className="flex min-h-screen flex-col items-center justify-center bg-[#0a0a0a] px-4">
       <div className="max-w-sm text-center">
         <span className="mb-6 block text-[11px] font-bold tracking-[0.2em] text-white/30 uppercase">
-          PromoVault
+          VaultPromo
         </span>
         <h1 className="text-xl font-semibold text-white">{title}</h1>
         <p className="mt-3 text-sm text-white/40">{body}</p>

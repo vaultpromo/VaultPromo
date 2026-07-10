@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { getCurrentProfile, verifySession } from "@/lib/dal";
 import { WorkspaceToggle } from "@/components/layout/workspace-toggle";
 import { PlanBadge } from "@/components/layout/plan-badge";
@@ -23,9 +24,16 @@ export default async function DashboardLayout({
           <div className="flex items-center gap-8">
             <Link
               href="/dashboard"
-              className="text-[11px] font-bold tracking-[0.2em] text-white/90 uppercase"
+              className="flex items-center"
             >
-              PromoVault
+              <Image
+                src="/logo-vaultpromo.png"
+                alt="VaultPromo"
+                width={120}
+                height={32}
+                className="h-8 w-auto object-contain"
+                priority
+              />
             </Link>
 
             <nav className="hidden items-center gap-1 sm:flex">

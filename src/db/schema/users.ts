@@ -47,7 +47,7 @@ export const profiles = pgTable("profiles", {
   djCountry: text("dj_country"), // ISO-2, e.g. "ES"
   djType: text("dj_type", { enum: ["dj", "radio", "press", "producer", "other"] }),
 
-  // PromoVault Network — opt-in to appear in the tastemaker directory
+  // VaultPromo Network — opt-in to appear in the tastemaker directory
   // When true, the user's DJ profile is visible to labels on the platform.
   // Governed by Terms of Service. Default false — never pre-selected.
   discoverable: boolean("discoverable").notNull().default(false),

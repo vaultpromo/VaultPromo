@@ -1,5 +1,6 @@
 import { LoginForm } from "@/components/auth/login-form";
 import { GoogleButton } from "@/components/auth/google-button";
+import Image from "next/image";
 
 const googleEnabled = !!(
   process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
@@ -9,12 +10,10 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-[#0a0a0a] px-4 py-12">
       <div className="w-full max-w-sm space-y-6">
-        <div className="text-center">
-          <p className="text-[11px] font-bold tracking-[0.2em] text-white/30 uppercase">
-            PromoVault
-          </p>
-          <h1 className="mt-3 text-2xl font-semibold text-white">Welcome back</h1>
-          <p className="mt-1 text-sm text-white/40">Sign in to your account</p>
+        <div className="flex flex-col items-center gap-2 text-center">
+          <Image src="/logo-vaultpromo.png" alt="VaultPromo" width={140} height={40} className="h-10 w-auto object-contain" />
+          <h1 className="text-2xl font-semibold text-white">Welcome back</h1>
+          <p className="text-sm text-white/40">Sign in to your account</p>
         </div>
 
         {googleEnabled && (
