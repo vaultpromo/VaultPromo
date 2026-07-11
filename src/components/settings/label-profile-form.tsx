@@ -19,8 +19,11 @@ export function LabelProfileForm({
   return (
     <form action={action} className="space-y-4">
       <div className="space-y-1">
-        <label className="block text-xs text-white/40">Label / Artist name</label>
+        <label htmlFor="labelName" className="block text-xs text-white/40">
+          Label / Artist name
+        </label>
         <input
+          id="labelName"
           name="labelName"
           type="text"
           defaultValue={currentName}
@@ -33,8 +36,11 @@ export function LabelProfileForm({
       </div>
 
       <div className="space-y-1">
-        <label className="block text-xs text-white/40">Website (optional)</label>
+        <label htmlFor="labelWebsite" className="block text-xs text-white/40">
+          Website (optional)
+        </label>
         <input
+          id="labelWebsite"
           name="labelWebsite"
           type="url"
           defaultValue={currentWebsite}
@@ -43,12 +49,8 @@ export function LabelProfileForm({
         />
       </div>
 
-      {state?.success && (
-        <p className="text-xs text-emerald-400">✓ Saved</p>
-      )}
-      {state?.message && (
-        <p className="text-xs text-red-400">{state.message}</p>
-      )}
+      {state?.success && <p className="text-xs text-emerald-400">✓ Saved</p>}
+      {state?.message && <p className="text-xs text-red-400">{state.message}</p>}
 
       <button
         type="submit"

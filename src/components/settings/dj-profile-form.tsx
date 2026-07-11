@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { updateDjProfileAction } from "@/lib/actions/profile";
 import type { DjProfileFormState } from "@/lib/actions/profile";
 
@@ -35,6 +35,13 @@ export function DjProfileForm({
   );
 
   const currentGenres = current.djGenres.split(",").map((g) => g.trim()).filter(Boolean);
+  const [selectedGenres, setSelectedGenres] = useState<string[]>(currentGenres);
+
+  function toggleGenre(genre: string) {
+    setSelectedGenres((prev) =>
+      prev.includes(genre) ? prev.filter((g) => g !== genre) : [...prev, genre],
+    );
+  }
 
   return (
     <form action={action} className="space-y-4">
@@ -44,8 +51,11 @@ export function DjProfileForm({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1">
-          <label className="block text-xs text-white/40">DJ alias / Name</label>
+          <label htmlFor="djAlias" className="block text-xs text-white/40">
+            DJ alias / Name
+          </label>
           <input
+            id="djAlias"
             name="djAlias"
             type="text"
             defaultValue={current.djAlias}
@@ -55,8 +65,11 @@ export function DjProfileForm({
         </div>
 
         <div className="space-y-1">
-          <label className="block text-xs text-white/40">Type</label>
+          <label htmlFor="djType" className="block text-xs text-white/40">
+            Type
+          </label>
           <select
+            id="djType"
             name="djType"
             defaultValue={current.djType}
             className="w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-sm text-white focus:border-white/20 focus:outline-none"
@@ -71,8 +84,11 @@ export function DjProfileForm({
         </div>
 
         <div className="space-y-1">
-          <label className="block text-xs text-white/40">City</label>
+          <label htmlFor="djCity" className="block text-xs text-white/40">
+            City
+          </label>
           <input
+            id="djCity"
             name="djCity"
             type="text"
             defaultValue={current.djCity}
@@ -82,8 +98,11 @@ export function DjProfileForm({
         </div>
 
         <div className="space-y-1">
-          <label className="block text-xs text-white/40">Country (2-letter code)</label>
+          <label htmlFor="djCountry" className="block text-xs text-white/40">
+            Country (2-letter code)
+          </label>
           <input
+            id="djCountry"
             name="djCountry"
             type="text"
             defaultValue={current.djCountry}
@@ -94,11 +113,27 @@ export function DjProfileForm({
         </div>
       </div>
 
-      {/* Genre multi-select as checkboxes */}
+      {/* Genre checkboxes — controlled state, hidden input sends comma-separated value */}
       <div className="space-y-2">
-        <label className="block text-xs text-white/40">Genres (select all that apply)</label>
-        {/* Hidden field to send genres as comma-separated string */}
-        <GenreSelector genres={GENRE_OPTIONS} defaultSelected={currentGenres} />
+        <p className="text-xs text-white/40">Genres (select all that apply)</p>
+        {/* Hidden input that holds the final comma-separated value */}
+        <input type="hidden" name="djGenres" value={selectedGenres.join(",")} />
+        <div className="flex flex-wrap gap-2">
+          {GENRE_OPTIONS.map((genre) => (
+            <button
+              key={genre}
+              type="button"
+              onClick={() => toggleGenre(genre)}
+              className={`rounded-md border px-2.5 py-1 text-xs transition ${
+                selectedGenres.includes(genre)
+                  ? "border-white/20 bg-white/[0.07] text-white/80"
+                  : "border-white/[0.07] bg-white/[0.02] text-white/40 hover:border-white/[0.14]"
+              }`}
+            >
+              {genre}
+            </button>
+          ))}
+        </div>
       </div>
 
       {state?.success && <p className="text-xs text-emerald-400">✓ Saved</p>}
@@ -115,48 +150,4 @@ export function DjProfileForm({
   );
 }
 
-function GenreSelector({
-  genres,
-  defaultSelected,
-}: {
-  genres: string[];
-  defaultSelected: string[];
-}) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {genres.map((genre) => (
-        <label
-          key={genre}
-          className="flex cursor-pointer items-center gap-1.5 rounded-md border border-white/[0.07] bg-white/[0.02] px-2.5 py-1 text-xs text-white/50 transition has-[:checked]:border-white/20 has-[:checked]:bg-white/[0.07] has-[:checked]:text-white/80"
-        >
-          <input
-            type="checkbox"
-            name="djGenres"
-            value={genre}
-            defaultChecked={defaultSelected.includes(genre)}
-            className="sr-only"
-          />
-          {genre}
-        </label>
-      ))}
-      {/* Convert checkboxes to comma-separated string via JS on submit */}
-      <script
-        dangerouslySetInnerHTML={{
-          __html: `
-            document.querySelectorAll('form').forEach(form => {
-              form.addEventListener('submit', function() {
-                const checked = [...this.querySelectorAll('input[name="djGenres"]:checked')].map(i => i.value);
-                const hidden = this.querySelector('input[type="hidden"][name="djGenres"]') || document.createElement('input');
-                hidden.type = 'hidden';
-                hidden.name = 'djGenres';
-                hidden.value = checked.join(',');
-                this.appendChild(hidden);
-                this.querySelectorAll('input[name="djGenres"]:not([type="hidden"])').forEach(i => i.disabled = true);
-              });
-            });
-          `,
-        }}
-      />
-    </div>
-  );
-}
+// Genre selector is now inline in the form above
