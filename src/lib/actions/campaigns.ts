@@ -406,9 +406,9 @@ export async function transcodeAllAction(
     }
   }
 
-  // Invoke Lambda once to process the whole batch
+  // Invoke Lambda enough times to cover all pending tracks (max 5 per invocation)
   const { invokeLambdaWorker } = await import("@/lib/lambda/invoke");
-  await invokeLambdaWorker();
+  await invokeLambdaWorker(toProcess.length);
 
   revalidatePath(`/dashboard/campaigns/${campaignId}`);
   return { queued: toProcess.length };
